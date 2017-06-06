@@ -76,16 +76,40 @@ def main():
             train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
             saver = tf.train.Saver(tf.all_variables(), max_to_keep=20)
 
-            # Initialize all variables
-            sess.run(tf.initialize_all_variables())
+            # Keep track of gradient values and sparsity (optional)
+            grad_summaries = []
+            for g, v in grads_and_vars:
+                if g is not None:
+                    grad_hist_summary = tf.summary.histogram("{}/grad/hist".format(v.name), g)
+                    sparsity_summary = tf.summary.scalar("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
+                    grad_summaries.append(grad_hist_summary)
+                    grad_summaries.append(sparsity_summary)
+            grad_summaries_merged = tf.summary.merge(grad_summaries)
 
-            # Checkpoint directory. Tensorflow assumes this directory already exists so we need to create it
+            # Output directory for models and summaries
             timestamp = str(int(time.time()))
             out_dir = os.path.abspath(os.path.join(FLAGS.train_dir, "runs", timestamp))
             if not os.path.exists(out_dir):
                 os.makedirs(out_dir)
             print("Writing to {}\n".format(out_dir))
             checkpoint_prefix = os.path.join(out_dir, "model")
+
+            # Summaries for loss and accuracy
+            loss_summary = tf.summary.scalar("loss", cnn.loss)
+            acc_summary = tf.summary.scalar("accuracy", cnn.accuracy)
+
+            # Train Summaries
+            train_summary_op = tf.summary.merge([loss_summary, acc_summary, grad_summaries_merged])
+            train_summary_dir = os.path.join(out_dir, "summaries", "train")
+            train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)
+
+            # Dev summaries
+            dev_summary_op = tf.summary.merge([loss_summary, acc_summary])
+            dev_summary_dir = os.path.join(out_dir, "summaries", "dev")
+            dev_summary_writer = tf.summary.FileWriter(dev_summary_dir, sess.graph)
+
+            # Initialize all variables
+            sess.run(tf.initialize_all_variables())
 
             def batch_iter(all_data, batch_size, num_epochs, shuffle=True):
                 data = np.array(all_data)
@@ -109,32 +133,35 @@ def main():
                     cnn.input_y: y_batch,
                     cnn.dropout_keep_prob: FLAGS.dropout_keep_prob
                 }
-                _, step, loss, accuracy = sess.run(
-                    [train_op, global_step, cnn.loss, cnn.accuracy],
+                _, step, summaries, loss, accuracy = sess.run(
+                    [train_op, global_step, train_summary_op, cnn.loss, cnn.accuracy],
                     feed_dict)
                 time_str = datetime.datetime.now().isoformat()
                 if step % 10 == 0:
                     print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
+                train_summary_writer.add_summary(summaries, step)
 
-            def dev_step(x_dev, y_batch_dev):
+            def dev_step(x_dev, y_batch_dev, writer=None):
                 feed_dict = {
                     cnn.input_tensor: x_dev,
                     cnn.input_y: y_batch_dev,
                     cnn.dropout_keep_prob: 1.0
                 }
-                step, loss, accuracy, pres = sess.run(
-                    [global_step, cnn.loss, cnn.accuracy, cnn.scores],
+                step, summaries, loss, accuracy, pres = sess.run(
+                    [global_step, dev_summary_op, cnn.loss, cnn.accuracy, cnn.scores],
                     feed_dict)
+                if writer:
+                    writer.add_summary(summaries, step)
                 return loss, accuracy
 
-            def dev_whole(x_dev, y_dev):
+            def dev_whole(x_dev, y_dev, writer=None):
                 batches_dev = batch_iter(list(zip(x_dev, y_dev)), FLAGS.batch_size, 1, shuffle=False)
                 losses = []
                 accuracies = []
 
                 for idx, batch_dev in enumerate(batches_dev):
                     x_batch, y_batch = zip(*batch_dev)
-                    loss, accurary = dev_step(x_batch, y_batch)
+                    loss, accurary = dev_step(x_batch, y_batch, writer)
                     losses.append(loss)
                     accuracies.append(accurary)
                 return np.mean(np.array(losses)), np.mean(np.array(accuracies))
@@ -160,7 +187,7 @@ def main():
 
                 if current_step % FLAGS.evaluate_every == 0:
                     print("\nEvaluation:")
-                    loss, accuracy = dev_whole(x_dev_tensor, y_dev)
+                    loss, accuracy = dev_whole(x_dev_tensor, y_dev, writer=dev_summary_writer)
                     time_str = datetime.datetime.now().isoformat()
                     print("{}: dev-aver, loss {:g}, acc {:g}".format(time_str, loss, accuracy))
                     dev_loss.append(accuracy)

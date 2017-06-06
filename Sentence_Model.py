@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from DLDisambiguation.util.input_helpers import InputHelper
-from DLDisambiguation.util.preprocess import MyVocabularyProcessor
+from util.preprocess import MyVocabularyProcessor
 from DLDisambiguation.util.util import loadIDFModel
 
 
@@ -54,10 +54,10 @@ def getAttention(r, x, index, vocab_id_w, idfModel):
 def getSentence_Embedding(x1, x2):
     max_document_length = 15
     # timestamp = "1496560933"  # sequence_length = 15
-    timestamp = "1496582776"  # sequence_length = 20
+    timestamp = "1496721420"  # sequence_length = 20
     dir = "/Users/luoyi/Documents/Python/DLDisambiguation"
 
-    out_dir = os.path.abspath(os.path.join(dir, "Bi-LSTM/runs", timestamp))
+    out_dir = os.path.abspath(os.path.join(dir, "Sentence_Modeling/runs", timestamp))
     checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
     ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
     checkpoint_file = ckpt.model_checkpoint_path

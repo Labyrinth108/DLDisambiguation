@@ -55,6 +55,7 @@ class SentenceModel:
             global_step = tf.Variable(0, name="global_step", trainable=False)
             optimizer = tf.train.AdamOptimizer(1e-3)
             print("initialized siameseModel object")
+            # writer = tf.summary.FileWriter(your_dir, sess.graph)
 
         grads_and_vars = optimizer.compute_gradients(siameseModel.loss)
         tr_op_set = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
@@ -68,13 +69,27 @@ class SentenceModel:
                 sparsity_summary = tf.summary.histogram("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
                 grad_summaries.append(grad_hist_summary)
                 grad_summaries.append(sparsity_summary)
-        # grad_summaries_merged = tf.merge_summary(grad_summaries)
+        grad_summaries_merged = tf.summary.merge(grad_summaries)
         print("defined gradient summaries")
 
         # Output directory for models and summaries
         timestamp = str(int(time.time()))
         out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
         print("Writing to {}\n".format(out_dir))
+
+        # Summaries for loss and accuracy
+        loss_summary = tf.summary.scalar("loss", siameseModel.loss)
+        acc_summary = tf.summary.scalar("accuracy", siameseModel.accuracy)
+
+        # Train Summaries
+        train_summary_op = tf.summary.merge([loss_summary, acc_summary, grad_summaries_merged])
+        train_summary_dir = os.path.join(out_dir, "summaries", "train")
+        train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)
+
+        # Dev summaries
+        dev_summary_op = tf.summary.merge([loss_summary, acc_summary])
+        dev_summary_dir = os.path.join(out_dir, "summaries", "dev")
+        dev_summary_writer = tf.summary.FileWriter(dev_summary_dir, sess.graph)
 
         # Checkpoint directory. Tensorflow assumes this directory already exists so we need to create it
         checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
@@ -113,8 +128,8 @@ class SentenceModel:
                     siameseModel.input_y: y_batch,
                     siameseModel.dropout_keep_prob: FLAGS.dropout_keep_prob,
                 }
-            _, step, loss, accuracy, dist = sess.run(
-                [tr_op_set, global_step, siameseModel.loss, siameseModel.accuracy, siameseModel.distance], feed_dict)
+            _, step, summaries, loss, accuracy, dist = sess.run(
+                [tr_op_set, global_step, train_summary_op, siameseModel.loss, siameseModel.accuracy, siameseModel.distance], feed_dict)
             time_str = datetime.datetime.now().isoformat()
             d = np.copy(dist)
             d[d >= 0.5] = 999.0
@@ -123,6 +138,7 @@ class SentenceModel:
             accuracy = np.mean(y_batch == d)
             print("TRAIN {}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
             print y_batch, dist, d
+            train_summary_writer.add_summary(summaries, step)
 
         def dev_step(x1_batch, x2_batch, y_batch):
             """
@@ -142,8 +158,8 @@ class SentenceModel:
                     siameseModel.input_y: y_batch,
                     siameseModel.dropout_keep_prob: FLAGS.dropout_keep_prob,
                 }
-            step, loss, accuracy, dist = sess.run(
-                [global_step, siameseModel.loss, siameseModel.accuracy, siameseModel.distance], feed_dict)
+            step, summaries, loss, accuracy, dist = sess.run(
+                [global_step, dev_summary_op, siameseModel.loss, siameseModel.accuracy, siameseModel.distance], feed_dict)
             time_str = datetime.datetime.now().isoformat()
             d = np.copy(dist)
             d[d >= 0.5] = 999.0
@@ -153,6 +169,7 @@ class SentenceModel:
             print("DEV {}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
             print y_batch, dist, d
             return accuracy
+            dev_summary_writer.add_summary(summaries, step)
 
         # Generate batches
         batches = inpH.batch_iter(

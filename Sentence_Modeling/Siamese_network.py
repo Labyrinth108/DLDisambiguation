@@ -189,6 +189,7 @@ class SiameseLSTM(object):
 
         with tf.name_scope("loss"):
             self.loss = self.contrastive_loss(self.input_y, self.distance, batch_size)
+
         with tf.name_scope("accuracy"):
             correct_predictions = tf.equal(self.distance, self.input_y)
             self.accuracy = tf.reduce_mean(tf.cast(correct_predictions, "float"), name="accuracy")
