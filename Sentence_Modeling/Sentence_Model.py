@@ -9,16 +9,17 @@ import os
 
 # Parameters
 # ==================================================
-tf.flags.DEFINE_integer("embedding_dim", 100, "Dimensionality of character embedding (default: 300)")
+tf.flags.DEFINE_integer("embedding_dim", 100, "Dimensionality of character embedding")
 tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout keep probability (default: 0.5)")
 tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularizaion lambda (default: 0.0)")
-tf.flags.DEFINE_string("training_files", "../data/1976data.txt", "training file (default: None)")
+tf.flags.DEFINE_string("training_files", "../data/new_training_data_.txt", "training file (default: None)")
+# tf.flags.DEFINE_string("training_files", "../data/1976data.txt", "training file (default: None)")
 # tf.flags.DEFINE_string("training_files", "../data/923data.txt", "training file (default: None)")
 tf.flags.DEFINE_integer("hidden_units", 50, "Number of hidden units in softmax regression layer (default:50)")
 
 # Training parameters
-tf.flags.DEFINE_integer("batch_size", 64, "Batch Size (default: 64)")
-tf.flags.DEFINE_integer("num_epochs", 100, "Number of training epochs (default: 200)")
+tf.flags.DEFINE_integer("batch_size", 64, "Batch Size")
+tf.flags.DEFINE_integer("num_epochs", 50, "Number of training epochs (default: 50)")
 tf.flags.DEFINE_integer("evaluate_every", 100,
                         "Evaluate model on dev set after this many steps (default: 100)")
 tf.flags.DEFINE_integer("checkpoint_every", 100, "Save model after this many steps (default: 100)")
@@ -55,7 +56,6 @@ class SentenceModel:
             global_step = tf.Variable(0, name="global_step", trainable=False)
             optimizer = tf.train.AdamOptimizer(1e-3)
             print("initialized siameseModel object")
-            # writer = tf.summary.FileWriter(your_dir, sess.graph)
 
         grads_and_vars = optimizer.compute_gradients(siameseModel.loss)
         tr_op_set = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
@@ -111,9 +111,7 @@ class SentenceModel:
             f.write(graphpb_txt)
 
         def train_step(x1_batch, x2_batch, y_batch):
-            """
-            A single training step
-            """
+
             if random() > 0.5:
                 feed_dict = {
                     siameseModel.input_x1: x1_batch,
@@ -130,6 +128,7 @@ class SentenceModel:
                 }
             _, step, summaries, loss, accuracy, dist = sess.run(
                 [tr_op_set, global_step, train_summary_op, siameseModel.loss, siameseModel.accuracy, siameseModel.distance], feed_dict)
+
             time_str = datetime.datetime.now().isoformat()
             d = np.copy(dist)
             d[d >= 0.5] = 999.0
@@ -141,9 +140,7 @@ class SentenceModel:
             train_summary_writer.add_summary(summaries, step)
 
         def dev_step(x1_batch, x2_batch, y_batch):
-            """
-            A single training step
-            """
+
             if random() > 0.5:
                 feed_dict = {
                     siameseModel.input_x1: x1_batch,
@@ -168,8 +165,8 @@ class SentenceModel:
             accuracy = np.mean(y_batch == d)
             print("DEV {}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
             print y_batch, dist, d
-            return accuracy
             dev_summary_writer.add_summary(summaries, step)
+            return accuracy
 
         # Generate batches
         batches = inpH.batch_iter(

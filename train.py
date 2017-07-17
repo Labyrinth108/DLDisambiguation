@@ -9,7 +9,8 @@ import numpy as np
 import tensorflow as tf
 
 from DLDisambiguation.util.input_helpers import InputHelper
-from DeepModel import CNNModel
+# from DeepModel import CNNModel
+from MultiGran_Model import MultiGranModel
 from tensor import Tensor
 
 # Parameters
@@ -63,7 +64,7 @@ def main():
 
         sess = tf.Session()
         with sess.as_default():
-            cnn = CNNModel(
+            cnn = MultiGranModel(
                 max_len=FLAGS.max_sequence_len,
                 filter_sizes=list(map(int, FLAGS.filter_sizes.split(","))),
                 num_filters=FLAGS.num_filters,

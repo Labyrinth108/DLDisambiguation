@@ -5,7 +5,7 @@ from DLDisambiguation.util.util import getEmbedding
 
 class SiameseLSTM(object):
     """
-    A LSTM based deep Siamese network for text similarity.
+    A LSTM based deep Siamese network
     Uses an character embedding layer, followed by a biLSTM and Energy Loss layer.
     """
 
@@ -19,12 +19,11 @@ class SiameseLSTM(object):
         # Required shape: 'n_steps' tensors list of shape (batch_size, n_input)
 
         # Permuting batch_size and n_steps
-        x = tf.transpose(x, [1, 0, 2])
+        x = tf.transpose(x, [1, 0, 2])  # (batch_size, n_steps, n_input) => (n_steps, batch_size, n_input)
         # Reshape to (n_steps*batch_size, n_input)
         x = tf.reshape(x, [-1, n_input])
         # Split to get a list of 'n_steps' tensors of shape (batch_size, n_input)
-        x = tf.split(x, n_steps, 0)  # new version api
-        # x = tf.split(0, n_steps, x)
+        x = tf.split(x, n_steps, 0)
 
         is_single_layer = True
         if is_single_layer == False:
@@ -40,7 +39,6 @@ class SiameseLSTM(object):
                 lstm_bw_cell = tf.contrib.rnn.DropoutWrapper(bw_cell, output_keep_prob=dropout)
                 lstm_bw_cell_m = tf.contrib.rnn.MultiRNNCell([lstm_bw_cell] * n_layers, state_is_tuple=True)
             # Get lstm cell output
-            # try:
             with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope):
                 outputs, _, _ = tf.contrib.rnn.static_bidirectional_rnn(lstm_fw_cell_m, lstm_bw_cell_m, x,
                                                                         dtype=tf.float32)
@@ -51,7 +49,7 @@ class SiameseLSTM(object):
             with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope):
                 print(tf.get_variable_scope().name)
                 bw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-            with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope):
+            with tf.name_scope("bwfw" + scope), tf.variable_scope("bw" + scope):
                 outputs, _, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn(fw_cell, bw_cell, x,
                                                                                       dtype=tf.float32)
         return outputs[-1]
@@ -66,12 +64,11 @@ class SiameseLSTM(object):
         # Reshape to (n_steps*batch_size, n_input)
         x = tf.reshape(x, [-1, n_input])
         # Split to get a list of 'n_steps' tensors of shape (batch_size, n_input)
-        x = tf.split(x, n_steps, 0)  # new version api
-        # x = tf.split(0, n_steps, x)
+        x = tf.split(x, n_steps, 0)
 
         is_single_layer = True
         if is_single_layer == False:
-            # Bi-LSTM
+            # Multiple Bi-LSTM
             with tf.name_scope("fw" + scope), tf.variable_scope("fw" + scope, reuse=True):
                 print(tf.get_variable_scope().name)
                 fw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
@@ -84,30 +81,34 @@ class SiameseLSTM(object):
                 lstm_bw_cell = tf.contrib.rnn.DropoutWrapper(bw_cell, output_keep_prob=dropout)
                 lstm_bw_cell_m = tf.contrib.rnn.MultiRNNCell([lstm_bw_cell] * n_layers, state_is_tuple=True)
 
-            with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope, reuse=True):
+            with tf.name_scope("fwbw" + scope), tf.variable_scope("bw" + scope, reuse=True):
+                # Outputs list contains the depth-concatenated fw and bw vectors for each input.
+                # output shape -- [time][batch][cell_fw.output_size + cell_bw.output_size]
                 outputs, _, _ = tf.contrib.rnn.static_bidirectional_rnn(lstm_fw_cell_m, lstm_bw_cell_m, x,
                                                                         dtype=tf.float32)
+
         else:
-            # Multiple Bi-LSTM
+            # Bi-LSTM
             with tf.name_scope("fw" + scope), tf.variable_scope("fw" + scope, reuse=True):
                 print(tf.get_variable_scope().name)
                 fw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
             with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope, reuse=True):
                 print(tf.get_variable_scope().name)
                 bw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-            with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope, reuse=True):
+            with tf.name_scope("fwbw" + scope), tf.variable_scope("bw" + scope, reuse=True):
+                # Outputs list contains the depth-concatenated fw and bw vectors for each input.
+                # output shape -- [time][batch][cell_fw.output_size + cell_bw.output_size]
                 outputs, _, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn(fw_cell, bw_cell, x,
                                                                                       dtype=tf.float32)
         return outputs
 
     def contrastive_loss(self, y, d, batch_size):
         tmp = y * tf.square(d)
-        # tmp= tf.mul(y,tf.square(d))
         tmp2 = (1 - y) * tf.square(tf.maximum((1 - d), 0))
         return tf.reduce_sum(tmp + tmp2) / batch_size / 2
 
     def getEmbedding_Construction(self, vocab, embedding, processer):
-        ## Extract word:id mapping from the object.
+        # Extract word:id mapping from the object.
         vocab_dict = processer.vocabulary_._mapping
         words_s = set(vocab_dict.keys())
 
@@ -173,17 +174,24 @@ class SiameseLSTM(object):
                                    sequence_length)
             self.out2 = self.BiRNN(self.embedded_chars2, self.dropout_keep_prob, "side2", embedding_size,
                                    sequence_length)
-            self.distance = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(self.out1, self.out2)), 1, keep_dims=True))
-            # self.distance = tf.div(self.distance,
-            #                        tf.add(tf.sqrt(tf.reduce_sum(tf.square(self.out1), 1, keep_dims=True)),
-            #                               tf.sqrt(tf.reduce_sum(tf.square(self.out2), 1, keep_dims=True))))
-            self.distance = tf.reshape(self.distance, [-1], name="distance")
+
+            # cosine distance
+            normalize_a = tf.nn.l2_normalize(self.out1, 1)
+            normalize_b = tf.nn.l2_normalize(self.out2, 1)
+            self.distance = tf.reduce_sum(tf.multiply(normalize_a, normalize_b), axis=1, name="distance")
+            print self.distance.get_shape().as_list()
+
+            # self.distance = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(self.out1, self.out2)), 1, keep_dims=True))
+            # # self.distance = tf.div(self.distance,
+            # #                        tf.add(tf.sqrt(tf.reduce_sum(tf.square(self.out1), 1, keep_dims=True)),
+            # #                               tf.sqrt(tf.reduce_sum(tf.square(self.out2), 1, keep_dims=True))))
+            # self.distance = tf.reshape(self.distance, [-1], name="distance")
 
         with tf.name_scope("sentence_embedding"):
             self.representation1 = self.get_Representation(self.embedded_chars1, self.dropout_keep_prob, "side1",
-                                                          embedding_size, sequence_length)
+                                                           embedding_size, sequence_length)
             self.representation2 = self.get_Representation(self.embedded_chars2, self.dropout_keep_prob, "side2",
-                                                          embedding_size, sequence_length)
+                                                           embedding_size, sequence_length)
             self.representation1 = tf.identity(self.representation1, name="Representation1")
             self.representation2 = tf.identity(self.representation2, name="Representation2")
 
@@ -191,5 +199,7 @@ class SiameseLSTM(object):
             self.loss = self.contrastive_loss(self.input_y, self.distance, batch_size)
 
         with tf.name_scope("accuracy"):
-            correct_predictions = tf.equal(self.distance, self.input_y)
+            predict_label = tf.subtract(tf.Variable(1.0), tf.round(self.distance))
+            correct_predictions = tf.equal(predict_label, self.input_y)
+            # correct_predictions = tf.equal(self.distance, self.input_y)
             self.accuracy = tf.reduce_mean(tf.cast(correct_predictions, "float"), name="accuracy")

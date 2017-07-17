@@ -3,14 +3,24 @@
 import re
 import numpy as np
 
+
 def preprocess_unit(str):
     res_0 = str.replace('&nbsp;', '')
     res_0 = re.sub(ur"\u3000", '', res_0)  # 将中文的空格用英文空格代替，后面可以处理
     res_0 = re.sub(ur"\[?[（]?\w+[.]?\w+\]?[）]?$", '', res_0)  # 去除掉ICD编码 eg:I20.222
-    # res_0 = re.sub(r"\w\d+.\d+", '', res_0)  # 去除掉ICD编码 eg:I20.222
+
+    res_0 = re.sub(r"\w\d+.\d+", '', res_0)  # 去除掉ICD编码 eg:I20.222
+    res_0 = re.sub(r"\w\d+.?x+\d+$", '', res_0)  # 去除掉尾部的编码 eg:I20.x222
+
     res_0 = re.sub(r"\s\w+", "", res_0)  # 去掉空格后的字母，eg: 心肌梗塞急性 NOS
-    res = re.split(ur"[（ ）\( \)， \.；;、：° \s+ \*\[ \] \+ ？? \,]", res_0.decode("utf-8"))
+    res_0 = re.sub(ur"\[\w+\]", "", res_0).strip()  # 去掉括号中的字母解释，eg: [NSSMD]
+    res_0 = re.sub(ur"（\w+）", "", res_0).strip()  # 去掉括号中的字母解释，eg: （NSSMD）
+    res_0 = re.sub(ur"\(\w+\)", "", res_0).strip()  # 去掉括号中的字母解释，eg: (NSSMD)
+
+    res = re.split(ur"[（ ）\( \)， \.；;、：° \s+ \*\[ \] \+ ？? \,]", res_0)
+
     res = filter(lambda x: len(x) != 1 and len(x) != 0, res)
+
     return "".join(res)
 
 
@@ -72,4 +82,3 @@ def getEmbedding(filename):
     embedding_dim = len(embd[0])
     embedding = np.asarray(embd)
     return vocab, vocab_size, embedding_dim, embedding
-

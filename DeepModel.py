@@ -38,6 +38,7 @@ class CNNModel(object):
                 # Maxpooling over the outputs
                 pooled = tf.nn.max_pool(
                     h,
+                    # ksize=[1, filter_size, filter_size, 1],
                     ksize=[1, max_len - filter_size + 1, max_len - filter_size + 1, 1],
                     # ksize=[1, max_len - filter_size + 1, 1, 1],
                     strides=[1, 1, 1, 1],
@@ -47,8 +48,8 @@ class CNNModel(object):
 
         # Combine all the pooled features
         num_filters_total = num_filters * len(filter_sizes)
-        self.h_pool = tf.concat(pooled_outputs, 3)
-        self.h_pool_flat = tf.reshape(self.h_pool, [-1, num_filters_total])
+        self.h_pool = tf.concat(pooled_outputs, 3) # 128
+        self.h_pool_flat = tf.reshape(self.h_pool, [-1, num_filters_total])  # 128
 
         # Add dropout
         with tf.name_scope("dropout"):

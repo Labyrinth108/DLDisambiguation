@@ -54,7 +54,8 @@ def getAttention(r, x, index, vocab_id_w, idfModel):
 def getSentence_Embedding(x1, x2):
     max_document_length = 15
     # timestamp = "1496560933"  # sequence_length = 15
-    timestamp = "1496721420"  # sequence_length = 20
+    # timestamp = "1496721420"  # sequence_length = 20
+    timestamp = "1500219958"
     dir = "/Users/luoyi/Documents/Python/DLDisambiguation"
 
     out_dir = os.path.abspath(os.path.join(dir, "Sentence_Modeling/runs", timestamp))
@@ -96,6 +97,8 @@ def getSentence_Embedding(x1, x2):
 
             sentence_representation1 = graph.get_operation_by_name("sentence_embedding/Representation1").outputs[0]
             sentence_representation2 = graph.get_operation_by_name("sentence_embedding/Representation2").outputs[0]
+            print "Sentence vector shape after sentence modeling"
+            print sentence_representation2.get_shape().as_list()
 
             r1, r2 = sess.run([sentence_representation1, sentence_representation2],
                               {input_x1: x1_index, input_x2: x2_index})

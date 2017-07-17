@@ -6,8 +6,8 @@ import jieba
 import re
 import gensim
 import codecs
+import os
 from DLDisambiguation.util.util import preprocess_unit
-
 
 def generateProcessedCorpusFile(src_file_path, character_file_path, word_file_path):
     """
@@ -24,17 +24,18 @@ def generateProcessedCorpusFile(src_file_path, character_file_path, word_file_pa
     line = file.readline()
 
     while line != "":
-        d = line.strip()
+        d = line.strip().decode("utf-8")
         # 处理"无"，"NA"."NULL".""的情况
-        if str(d) != 1 and d != "NA" and d != "NULL" and d != "":
+        if len(d) != 1 and d != "NA" and d != "NULL" and d != "":
             data.append(d)
         line = file.readline()
 
     character_file = codecs.open(character_file_path, "w+", "utf-8")
-
     for i in data:
         res = preprocess_unit(i)
         characters = list("".join(res))
+        if len(characters) == 0:
+            continue
         character_file.write(" ".join(characters) + "\n")
     character_file.close()
     print("Finished character model!")
@@ -43,8 +44,10 @@ def generateProcessedCorpusFile(src_file_path, character_file_path, word_file_pa
 
     for i in data:
         res = preprocess_unit(i)
-        x = jieba.cut(" ".join(res))
+        x = jieba.cut(res)
         words = list(x)
+        if len(words) == 0:
+            continue
         word_file.write(" ".join(words) + "\n")
     word_file.close()
     print("Finished Word model!")
@@ -98,6 +101,9 @@ class MySentences(object):
         for line in open(self.fname):
             yield line.split()
 
+def checkPath(x):
+    if not os.path.exists(x):
+        open(x, 'a').close()
 
 def compute_word2vec(src_file, model_file, wv_file):
     load_model_flag = False
@@ -105,6 +111,9 @@ def compute_word2vec(src_file, model_file, wv_file):
     if not load_model_flag:
         sentences = MySentences(src_file)  # a memory-friendly iterator
         model = gensim.models.Word2Vec(sentences)
+
+        checkPath(model_file)
+        checkPath(wv_file)
 
         model.save(model_file)  # save model
         model.wv.save_word2vec_format(wv_file, binary=False)  # save word2vec txt
@@ -114,20 +123,22 @@ def compute_word2vec(src_file, model_file, wv_file):
 
 
 if __name__ == "__main__":
-    corpus_file = "./data/src.txt"
-    idf_model = "./data/idfModel.txt"
 
-    src_file_path = "./data/src1.txt"
-    character_src_file = "./data/word2vec/character_src.txt"
-    character_model_file = './data/word2vec/character.model'
-    character_wv_file = './data/word2vec/character_model.txt'
+    corpus_file = "../data/db_description_d2013.txt"
+    # idf_model = "./data/idfModel.txt"
 
-    word_src_file = "./data/word2vec/word_src.txt"
-    word_model_file = './data/word2vec/word.model'
-    word_wv_file = './data/word2vec/word_model.txt'
+    character_src_file = "../data/word2vec_new/character_src.txt"
+    character_model_file = '../data/word2vec_new/character.model'
+    character_wv_file = '../data/word2vec_new/character_model.txt'
+
+    word_src_file = "../data/word2vec_new/word_src.txt"
+    word_model_file = '../data/word2vec_new/word.model'
+    word_wv_file = '../data/word2vec_new/word_model.txt'
 
     # get_IDF(corpus_file, idf_model)
 
-    generateProcessedCorpusFile(src_file_path, character_src_file, word_src_file)
-    # compute_word2vec(character_src_file, character_model_file, character_wv_file)
-    # compute_word2vec(word_src_file, word_model_file, word_wv_file)
+    # produce character_src_file and word_src_file from corpus file
+    # generateProcessedCorpusFile(corpus_file, character_src_file, word_src_file)
+
+    compute_word2vec(character_src_file, character_model_file, character_wv_file)
+    compute_word2vec(word_src_file, word_model_file, word_wv_file)
