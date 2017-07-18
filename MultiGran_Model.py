@@ -3,29 +3,28 @@
 import numpy as np
 import tensorflow as tf
 
-
 class MultiGranModel(object):
+
     def _conv(self, name, in_, ksize, reuse=False):
         num_filters = ksize[3]
+
         with tf.variable_scope(name, reuse=reuse) as scope:
-            # Convolution Layer
-            W = tf.Variable(tf.truncated_normal(ksize, stddev=0.1), name="W")
-            b = tf.Variable(tf.constant(0.1, shape=[num_filters]), name="b")
-            conv = tf.nn.conv2d(
-                in_,
-                W,
-                strides=[1, 1, 1, 1],
-                padding="VALID",
-                name="conv")
-            # Apply nonlinearity
-            h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
+            # different CNN for different views
+            # W = tf.Variable(tf.truncated_normal(ksize, stddev=0.1), name="W")
+            # biases = tf.Variable(tf.constant(0.1, shape=[num_filters]), name="b")
+
+            # same CNN for different views
+            # W = tf.get_variable("weights", ksize, initializer=tf.contrib.layers.xavier_initializer())
+            W = tf.get_variable("weights", ksize, initializer=tf.truncated_normal_initializer(stddev=0.1))
+            biases = tf.get_variable("biases", [num_filters], initializer=tf.constant_initializer(0.1))
+
+            conv = tf.nn.conv2d(in_, W, strides=[1, 1, 1, 1], padding="VALID")
+            h = tf.nn.relu(tf.nn.bias_add(conv, biases), name=scope.name)
 
         return h
 
     def _maxpool(self, name, in_, ksize, strides):
-        pool = tf.nn.max_pool(in_, ksize=ksize, strides=strides,
-                              padding='VALID', name=name)
-
+        pool = tf.nn.max_pool(in_, ksize=ksize, strides=strides, padding='VALID', name=name)
         print name, pool.get_shape().as_list()
         return pool
 
@@ -68,16 +67,16 @@ class MultiGranModel(object):
 
             pooled_outputs.append(reshape)
 
-        x = tf.stack(pooled_outputs)  # 4 * N * 7744
-        x = tf.transpose(x, perm=[1, 2, 0])  # N * 7744 * 4
-        reshape = tf.reshape(x, [-1, 4])
-        print reshape.get_shape().as_list()
+        with tf.name_scope("view_pooling"):
+            x = tf.stack(pooled_outputs)  # 4 * N * 7744
+            x = tf.transpose(x, perm=[1, 2, 0])  # N * 7744 * 4
+            reshape = tf.reshape(x, [-1, 4])
+            print reshape.get_shape().as_list()
 
-        # View pooling
-        Weights = tf.Variable(tf.random_uniform([4, 1], -1.0, 1.0))
-        y = tf.matmul(reshape, Weights)
-        y = tf.reshape(y, [-1, dim])
-        print y.get_shape().as_list()
+            Weights = tf.Variable(tf.random_uniform([4, 1], -1.0, 1.0), name="W")
+            y = tf.matmul(reshape, Weights, name="view_pooling")
+            y = tf.reshape(y, [-1, dim])
+            print y.get_shape().as_list()
 
         # Add dropout
         with tf.name_scope("dropout"):

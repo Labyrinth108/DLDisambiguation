@@ -13,7 +13,6 @@ class SiameseLSTM(object):
         n_input = embedding_size
         n_steps = sequence_length
         n_hidden = 10
-        n_layers = 3
         # Prepare data shape to match `bidirectional_rnn` function requirements
         # Current data input shape: (batch_size, n_steps, n_input) (?, seq_len, embedding_size)
         # Required shape: 'n_steps' tensors list of shape (batch_size, n_input)
@@ -25,32 +24,14 @@ class SiameseLSTM(object):
         # Split to get a list of 'n_steps' tensors of shape (batch_size, n_input)
         x = tf.split(x, n_steps, 0)
 
-        is_single_layer = True
-        if is_single_layer == False:
-            with tf.name_scope("fw" + scope), tf.variable_scope("fw" + scope):
-                print(tf.get_variable_scope().name)
-                fw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-                lstm_fw_cell = tf.contrib.rnn.DropoutWrapper(fw_cell, output_keep_prob=dropout)
-                lstm_fw_cell_m = tf.contrib.rnn.MultiRNNCell([lstm_fw_cell] * n_layers, state_is_tuple=True)
-            # Backward direction cell
-            with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope):
-                print(tf.get_variable_scope().name)
-                bw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-                lstm_bw_cell = tf.contrib.rnn.DropoutWrapper(bw_cell, output_keep_prob=dropout)
-                lstm_bw_cell_m = tf.contrib.rnn.MultiRNNCell([lstm_bw_cell] * n_layers, state_is_tuple=True)
-            # Get lstm cell output
-            with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope):
-                outputs, _, _ = tf.contrib.rnn.static_bidirectional_rnn(lstm_fw_cell_m, lstm_bw_cell_m, x,
-                                                                        dtype=tf.float32)
-        else:
-            with tf.name_scope("fw" + scope), tf.variable_scope("fw" + scope):
-                print(tf.get_variable_scope().name)
-                fw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-            with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope):
-                print(tf.get_variable_scope().name)
-                bw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-            with tf.name_scope("bwfw" + scope), tf.variable_scope("bw" + scope):
-                outputs, _, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn(fw_cell, bw_cell, x,
+        with tf.name_scope("fw" + scope), tf.variable_scope("fw" + scope):
+            print(tf.get_variable_scope().name)
+            fw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
+        with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope):
+            print(tf.get_variable_scope().name)
+            bw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
+        with tf.name_scope("bwfw" + scope), tf.variable_scope("bw" + scope):
+            outputs, _, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn(fw_cell, bw_cell, x,
                                                                                       dtype=tf.float32)
         return outputs[-1]
 
@@ -58,7 +39,6 @@ class SiameseLSTM(object):
         n_input = embedding_size
         n_steps = sequence_length
         n_hidden = 10
-        n_layers = 3
 
         x = tf.transpose(x, [1, 0, 2])
         # Reshape to (n_steps*batch_size, n_input)
@@ -66,40 +46,17 @@ class SiameseLSTM(object):
         # Split to get a list of 'n_steps' tensors of shape (batch_size, n_input)
         x = tf.split(x, n_steps, 0)
 
-        is_single_layer = True
-        if is_single_layer == False:
-            # Multiple Bi-LSTM
-            with tf.name_scope("fw" + scope), tf.variable_scope("fw" + scope, reuse=True):
-                print(tf.get_variable_scope().name)
-                fw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-                lstm_fw_cell = tf.contrib.rnn.DropoutWrapper(fw_cell, output_keep_prob=dropout)
-                lstm_fw_cell_m = tf.contrib.rnn.MultiRNNCell([lstm_fw_cell] * n_layers, state_is_tuple=True)
-            # Backward direction cell
-            with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope, reuse=True):
-                print(tf.get_variable_scope().name)
-                bw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-                lstm_bw_cell = tf.contrib.rnn.DropoutWrapper(bw_cell, output_keep_prob=dropout)
-                lstm_bw_cell_m = tf.contrib.rnn.MultiRNNCell([lstm_bw_cell] * n_layers, state_is_tuple=True)
-
-            with tf.name_scope("fwbw" + scope), tf.variable_scope("bw" + scope, reuse=True):
-                # Outputs list contains the depth-concatenated fw and bw vectors for each input.
-                # output shape -- [time][batch][cell_fw.output_size + cell_bw.output_size]
-                outputs, _, _ = tf.contrib.rnn.static_bidirectional_rnn(lstm_fw_cell_m, lstm_bw_cell_m, x,
-                                                                        dtype=tf.float32)
-
-        else:
-            # Bi-LSTM
-            with tf.name_scope("fw" + scope), tf.variable_scope("fw" + scope, reuse=True):
-                print(tf.get_variable_scope().name)
-                fw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-            with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope, reuse=True):
-                print(tf.get_variable_scope().name)
-                bw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-            with tf.name_scope("fwbw" + scope), tf.variable_scope("bw" + scope, reuse=True):
-                # Outputs list contains the depth-concatenated fw and bw vectors for each input.
-                # output shape -- [time][batch][cell_fw.output_size + cell_bw.output_size]
-                outputs, _, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn(fw_cell, bw_cell, x,
-                                                                                      dtype=tf.float32)
+        # Bi-LSTM
+        with tf.name_scope("fw" + scope), tf.variable_scope("fw" + scope, reuse=True):
+            print(tf.get_variable_scope().name)
+            fw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
+        with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope, reuse=True):
+            print(tf.get_variable_scope().name)
+            bw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
+        with tf.name_scope("fwbw" + scope), tf.variable_scope("bw" + scope, reuse=True):
+            # Outputs list contains the depth-concatenated fw and bw vectors for each input.
+            # output shape -- [time][batch][cell_fw.output_size + cell_bw.output_size]
+            outputs, _, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn(fw_cell, bw_cell, x, dtype=tf.float32)
         return outputs
 
     def contrastive_loss(self, y, d, batch_size):
@@ -192,6 +149,7 @@ class SiameseLSTM(object):
                                                            embedding_size, sequence_length)
             self.representation2 = self.get_Representation(self.embedded_chars2, self.dropout_keep_prob, "side2",
                                                            embedding_size, sequence_length)
+
             self.representation1 = tf.identity(self.representation1, name="Representation1")
             self.representation2 = tf.identity(self.representation2, name="Representation2")
 

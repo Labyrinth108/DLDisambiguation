@@ -16,7 +16,7 @@ sys.setdefaultencoding("utf-8")
 
 
 class InputHelper(object):
-    def getTsvData(self, filepath):
+    def getTsvData(self, filepath, sequence_length):
         """
         get positive data from file and do negative sampling
         :param filepath: the file with positive mapping
@@ -31,6 +31,9 @@ class InputHelper(object):
         for line in codecs.open(filepath, "r", "utf-8"):
             l = line.strip().split("\t")
             if len(l) < 2:
+                continue
+
+            if len(l[0]) > sequence_length or len(l[1]) > sequence_length:
                 continue
 
             l[0] = preprocess_unit(l[0])
@@ -69,7 +72,7 @@ class InputHelper(object):
         print(data)
         print(data.shape)
         data_size = len(data)
-        num_batches_per_epoch = int(len(data) / batch_size) + 1
+        num_batches_per_epoch = int(len(data) / batch_size)
 
         for epoch in range(num_epochs):
             # Shuffle the data at each epoch
@@ -102,7 +105,7 @@ class InputHelper(object):
         del y_dev
 
     def getDataSets(self, training_paths, max_document_length, percent_dev, batch_size):
-        x1_text, x2_text, y = self.getTsvData(training_paths)
+        x1_text, x2_text, y = self.getTsvData(training_paths, max_document_length)
 
         # Build vocabulary
         print("Building vocabulary")
@@ -137,6 +140,29 @@ class InputHelper(object):
         dev_set = (x1_dev, x2_dev, y_dev)
         gc.collect()
         return train_set, dev_set, vocab_processor, sum_no_of_batches
+
+    def splitDataSets(self, training_paths, percent_dev, max_len):
+        x1_text, x2_text, y = self.getTsvData(training_paths, max_len)
+
+        # Randomly shuffle data
+        np.random.seed(131)
+        shuffle_indices = np.random.permutation(np.arange(len(y)))
+        x1_shuffled = x1_text[shuffle_indices]
+        x2_shuffled = x2_text[shuffle_indices]
+        y_shuffled = y[shuffle_indices]
+        dev_idx = -1 * len(y_shuffled) * percent_dev // 100
+
+        # Split train/test set
+        # self.dumpValidation(x1_text, x2_text, y, shuffle_indices, dev_idx, 0)
+
+        # TODO: This is very crude, should use cross-validation
+        x1_train, x1_dev = x1_shuffled[:dev_idx], x1_shuffled[dev_idx:]
+        x2_train, x2_dev = x2_shuffled[:dev_idx], x2_shuffled[dev_idx:]
+        y_train, y_dev = y_shuffled[:dev_idx], y_shuffled[dev_idx:]
+        print("Train/Dev split for {}: {:d}/{:d}".format(training_paths, len(y_train), len(y_dev)))
+
+        gc.collect()
+        return x1_train, x2_train, y_train, x1_dev, x2_dev, y_dev
 
     def getTestDataSet(self, data_path, vocab_path, max_document_length):
         x1_temp, x2_temp, y = self.getTsvTestData(data_path)
