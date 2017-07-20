@@ -9,7 +9,7 @@ class SiameseLSTM(object):
     Uses an character embedding layer, followed by a biLSTM and Energy Loss layer.
     """
 
-    def BiRNN(self, x, dropout, scope, embedding_size, sequence_length):
+    def BiRNN(self, x, dropout, scope, embedding_size, sequence_length, reuse_f=None):
         n_input = embedding_size
         n_steps = sequence_length
         n_hidden = 10
@@ -24,15 +24,18 @@ class SiameseLSTM(object):
         # Split to get a list of 'n_steps' tensors of shape (batch_size, n_input)
         x = tf.split(x, n_steps, 0)
 
-        with tf.name_scope("fw" + scope), tf.variable_scope("fw" + scope):
+        # with tf.name_scope("fw" + scope),tf.variable_scope("fw" + scope):
+        with tf.name_scope("fw" + scope), tf.variable_scope("fw" + scope, reuse=reuse_f):
             print(tf.get_variable_scope().name)
             fw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-        with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope):
+        # with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope ):
+        with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope, reuse=reuse_f):
             print(tf.get_variable_scope().name)
             bw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-        with tf.name_scope("bwfw" + scope), tf.variable_scope("bw" + scope):
-            outputs, _, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn(fw_cell, bw_cell, x,
-                                                                                      dtype=tf.float32)
+        # with tf.name_scope("fwbw" + scope), tf.variable_scope("fwbw" + scope):
+        with tf.name_scope("fwbw" + scope), tf.variable_scope("fwbw" + scope, reuse=reuse_f):
+            outputs, _, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn(fw_cell, bw_cell, x, dtype=tf.float32)
+
         return outputs[-1]
 
     def get_Representation(self, x, dropout, scope, embedding_size, sequence_length):
@@ -53,7 +56,7 @@ class SiameseLSTM(object):
         with tf.name_scope("bw" + scope), tf.variable_scope("bw" + scope, reuse=True):
             print(tf.get_variable_scope().name)
             bw_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-        with tf.name_scope("fwbw" + scope), tf.variable_scope("bw" + scope, reuse=True):
+        with tf.name_scope("fwbw" + scope), tf.variable_scope("fwbw" + scope, reuse=True):
             # Outputs list contains the depth-concatenated fw and bw vectors for each input.
             # output shape -- [time][batch][cell_fw.output_size + cell_bw.output_size]
             outputs, _, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn(fw_cell, bw_cell, x, dtype=tf.float32)
@@ -115,9 +118,7 @@ class SiameseLSTM(object):
 
         # Embedding layer
         with tf.name_scope("embedding"):
-            self.W = tf.Variable(
-                tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0),
-                trainable=True, name="W")
+            self.W = tf.Variable(tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0), trainable=True, name="W")
             self.embedding_placeholder = tf.placeholder(tf.float32, [vocab_size, embedding_size])
 
             self.embedded_chars1 = tf.nn.embedding_lookup(self.W, self.input_x1)
@@ -127,11 +128,14 @@ class SiameseLSTM(object):
 
         # Create a convolution + maxpool layer for each filter size
         with tf.name_scope("output"):
+            # self.out1 = self.BiRNN(self.embedded_chars1, self.dropout_keep_prob, "side", embedding_size,
+            #                        sequence_length, reuse_f=None)
+            # self.out2 = self.BiRNN(self.embedded_chars2, self.dropout_keep_prob, "side", embedding_size,
+            #                        sequence_length, reuse_f=True)
             self.out1 = self.BiRNN(self.embedded_chars1, self.dropout_keep_prob, "side1", embedding_size,
                                    sequence_length)
             self.out2 = self.BiRNN(self.embedded_chars2, self.dropout_keep_prob, "side2", embedding_size,
                                    sequence_length)
-
             # cosine distance
             normalize_a = tf.nn.l2_normalize(self.out1, 1)
             normalize_b = tf.nn.l2_normalize(self.out2, 1)

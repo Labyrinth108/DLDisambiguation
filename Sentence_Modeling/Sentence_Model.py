@@ -15,10 +15,11 @@ tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularizaion lambda (default: 0
 tf.flags.DEFINE_string("training_files", "../data/new_training_data_.txt", "training file (default: None)")
 # tf.flags.DEFINE_string("training_files", "../data/1976data.txt", "training file (default: None)")
 # tf.flags.DEFINE_string("training_files", "../data/923data.txt", "training file (default: None)")
+
 tf.flags.DEFINE_integer("hidden_units", 50, "Number of hidden units in softmax regression layer (default:50)")
 
 # Training parameters
-tf.flags.DEFINE_integer("batch_size", 64, "Batch Size")
+tf.flags.DEFINE_integer("batch_size", 128, "Batch Size")
 tf.flags.DEFINE_integer("num_epochs", 50, "Number of training epochs (default: 50)")
 tf.flags.DEFINE_integer("evaluate_every", 100,
                         "Evaluate model on dev set after this many steps (default: 100)")
@@ -62,14 +63,11 @@ class SentenceModel:
         print("defined training_ops")
 
         # Keep track of gradient values and sparsity (optional)
-        grad_summaries = []
         for g, v in grads_and_vars:
             if g is not None:
-                grad_hist_summary = tf.summary.histogram("{}/grad/hist".format(v.name), g)
-                sparsity_summary = tf.summary.histogram("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
-                grad_summaries.append(grad_hist_summary)
-                grad_summaries.append(sparsity_summary)
-        grad_summaries_merged = tf.summary.merge(grad_summaries)
+                tf.summary.histogram("grad_hist/{}".format(v.name), g)
+                tf.summary.histogram("grad_sparsity/{}".format(v.name), tf.nn.zero_fraction(g))
+                tf.summary.histogram(v.name, v)
         print("defined gradient summaries")
 
         # Output directory for models and summaries
@@ -82,7 +80,7 @@ class SentenceModel:
         acc_summary = tf.summary.scalar("accuracy", siameseModel.accuracy)
 
         # Train Summaries
-        train_summary_op = tf.summary.merge([loss_summary, acc_summary, grad_summaries_merged])
+        train_summary_merged = tf.summary.merge_all()
         train_summary_dir = os.path.join(out_dir, "summaries", "train")
         train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)
 
@@ -112,22 +110,15 @@ class SentenceModel:
 
         def train_step(x1_batch, x2_batch, y_batch):
 
-            if random() > 0.5:
-                feed_dict = {
+            feed_dict = {
                     siameseModel.input_x1: x1_batch,
                     siameseModel.input_x2: x2_batch,
                     siameseModel.input_y: y_batch,
                     siameseModel.dropout_keep_prob: FLAGS.dropout_keep_prob,
-                }
-            else:
-                feed_dict = {
-                    siameseModel.input_x1: x2_batch,
-                    siameseModel.input_x2: x1_batch,
-                    siameseModel.input_y: y_batch,
-                    siameseModel.dropout_keep_prob: FLAGS.dropout_keep_prob,
-                }
+            }
+
             _, step, summaries, loss, accuracy, dist = sess.run(
-                [tr_op_set, global_step, train_summary_op, siameseModel.loss, siameseModel.accuracy, siameseModel.distance], feed_dict)
+                [tr_op_set, global_step, train_summary_merged, siameseModel.loss, siameseModel.accuracy, siameseModel.distance], feed_dict)
 
             time_str = datetime.datetime.now().isoformat()
             d = np.copy(dist)
@@ -141,20 +132,13 @@ class SentenceModel:
 
         def dev_step(x1_batch, x2_batch, y_batch):
 
-            if random() > 0.5:
-                feed_dict = {
+            feed_dict = {
                     siameseModel.input_x1: x1_batch,
                     siameseModel.input_x2: x2_batch,
                     siameseModel.input_y: y_batch,
                     siameseModel.dropout_keep_prob: FLAGS.dropout_keep_prob,
-                }
-            else:
-                feed_dict = {
-                    siameseModel.input_x1: x2_batch,
-                    siameseModel.input_x2: x1_batch,
-                    siameseModel.input_y: y_batch,
-                    siameseModel.dropout_keep_prob: FLAGS.dropout_keep_prob,
-                }
+            }
+
             step, summaries, loss, accuracy, dist = sess.run(
                 [global_step, dev_summary_op, siameseModel.loss, siameseModel.accuracy, siameseModel.distance], feed_dict)
             time_str = datetime.datetime.now().isoformat()

@@ -124,16 +124,25 @@ def compute_word2vec(src_file, model_file, wv_file):
 
 if __name__ == "__main__":
 
-    corpus_file = "../data/db_description_d2013.txt"
+    corpus_file = "../data/d2013_operation.txt"
+    # corpus_file = "../data/db_description_d2013.txt"
     # idf_model = "./data/idfModel.txt"
 
-    character_src_file = "../data/word2vec_new/character_src.txt"
-    character_model_file = '../data/word2vec_new/character.model'
-    character_wv_file = '../data/word2vec_new/character_model.txt'
+    # character_src_file = "../data/word2vec_new/character_src.txt"
+    # character_model_file = '../data/word2vec_new/character.model'
+    # character_wv_file = '../data/word2vec_new/character_model.txt'
+    #
+    # word_src_file = "../data/word2vec_new/word_src.txt"
+    # word_model_file = '../data/word2vec_new/word.model'
+    # word_wv_file = '../data/word2vec_new/word_model.txt'
 
-    word_src_file = "../data/word2vec_new/word_src.txt"
-    word_model_file = '../data/word2vec_new/word.model'
-    word_wv_file = '../data/word2vec_new/word_model.txt'
+    character_src_file = "../data/operation/character_src.txt"
+    character_model_file = '../data/operation/character.model'
+    character_wv_file = '../data/operation/character_model.txt'
+
+    word_src_file = "../data/operation/word_src.txt"
+    word_model_file = '../data/operation/word.model'
+    word_wv_file = '../data/operation/word_model.txt'
 
     # get_IDF(corpus_file, idf_model)
 

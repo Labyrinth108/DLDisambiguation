@@ -3,8 +3,8 @@
 import numpy as np
 import tensorflow as tf
 
-class MultiGranModel(object):
 
+class MultiGranModel(object):
     def _conv(self, name, in_, ksize, reuse=False):
         num_filters = ksize[3]
 
@@ -73,7 +73,8 @@ class MultiGranModel(object):
             reshape = tf.reshape(x, [-1, 4])
             print reshape.get_shape().as_list()
 
-            Weights = tf.Variable(tf.random_uniform([4, 1], -1.0, 1.0), name="W")
+            Weights = tf.Variable(tf.random_uniform([4, 1], 0, 1.0), name="W")
+
             y = tf.matmul(reshape, Weights, name="view_pooling")
             y = tf.reshape(y, [-1, dim])
             print y.get_shape().as_list()
@@ -85,11 +86,9 @@ class MultiGranModel(object):
 
         # Final (unnormalized) scores and predictions
         with tf.name_scope("output"):
-            W = tf.get_variable(
-                "W_output",
-                shape=[dim, 2],
-                initializer=tf.contrib.layers.xavier_initializer())
+            W = tf.Variable(name="W_output", initial_value=tf.random_normal(shape=[dim, 2], stddev=0.1))
             b = tf.Variable(tf.constant(0.1, shape=[2]), name="b")
+
             l2_loss += tf.nn.l2_loss(W)
             l2_loss += tf.nn.l2_loss(b)
             self.scores = tf.nn.xw_plus_b(self.h_drop, W, b, name="scores")
