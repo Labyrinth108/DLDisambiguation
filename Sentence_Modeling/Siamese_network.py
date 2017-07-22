@@ -97,7 +97,8 @@ class SiameseLSTM(object):
         embedding_init = self.W.assign(self.embedding_placeholder)
 
         # load in word2vec model
-        vocab, vocab_size, embedding_dim, embedding = getEmbedding("../data/word2vec/character_model.txt")
+        vocab, vocab_size, embedding_dim, embedding = getEmbedding("../data/operation/character_model.txt")
+        # vocab, vocab_size, embedding_dim, embedding = getEmbedding("../data/word2vec/character_model.txt")
 
         embedding_construct = self.getEmbedding_Construction(vocab, embedding, self.vocab_processer)
         sess.run(embedding_init, feed_dict={self.embedding_placeholder: embedding_construct})

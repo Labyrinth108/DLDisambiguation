@@ -10,9 +10,9 @@ from DLDisambiguation.util.input_helpers import InputHelper
 from util.preprocess import MyVocabularyProcessor
 from DLDisambiguation.util.util import loadIDFModel
 
-class Tensor(object):
 
-    def __init__(self, m, e, batch_size, sequence_length):
+class Tensor(object):
+    def __init__(self, m, e, batch_size, sequence_length, task_num):
         """
         initialize tensors
         :param m: mention list
@@ -21,9 +21,21 @@ class Tensor(object):
         :param sequence_length: default sentence length
         """
         channel_num = 4
-        dir = "/Users/luoyi/Documents/Python/DLDisambiguation/data/word2vec"
-        character_model_file = os.path.join(dir, 'character.model')
-        word_mode_file = os.path.join(dir, 'word.model')
+        if task_num == 1:  # task1-description disambiguation
+            word2vec_dir = "./data/word2vec"
+            timestamp = "1500219958"
+            self.idfModel_file = "./data/idfModel.txt"
+
+        else:  # task2-operation disambiguation
+            word2vec_dir = "./data/operation"
+            timestamp = "1500598538"
+            self.idfModel_file = "./data/idfModel_operation.txt"
+
+        character_model_file = os.path.join(word2vec_dir, 'character.model')
+        word_mode_file = os.path.join(word2vec_dir, 'word.model')
+
+        dir = "/Users/luoyi/Documents/Python/DLDisambiguation"
+        self.bilstm_dir = os.path.abspath(os.path.join(dir, "Sentence_Modeling/runs", timestamp))
 
         self.mentions = preprocess_arr(m)
         self.entities = preprocess_arr(e)
@@ -178,13 +190,8 @@ class Tensor(object):
 
     def getSentence_Embedding(self, x1, x2):
         max_document_length = 20
-        # timestamp = "1496560933"  # sequence_length = 15
-        # timestamp = "1496721420"  # sequence_length = 20
-        timestamp = "1500219958"
-        dir = "/Users/luoyi/Documents/Python/DLDisambiguation"
 
-        out_dir = os.path.abspath(os.path.join(dir, "Sentence_Modeling/runs", timestamp))
-        checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
+        checkpoint_dir = os.path.abspath(os.path.join(self.bilstm_dir, "checkpoints"))
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
         checkpoint_file = ckpt.model_checkpoint_path
 
@@ -193,8 +200,7 @@ class Tensor(object):
         inpH = InputHelper()
         x1_index, x2_index = inpH.toVocabularyIndexVector(x1, x2, vocab_file, max_document_length)
 
-        idfModel_file = os.path.join(dir, "data/idfModel.txt")
-        idfModel = loadIDFModel(idfModel_file)
+        idfModel = loadIDFModel(self.idfModel_file)
 
         # load vocabulary model
         vocab_processor = MyVocabularyProcessor(max_document_length, min_frequency=0)
@@ -234,4 +240,3 @@ class Tensor(object):
                 representation2 = self.getAttention(r2, x2, x2_index, vocab_id_w, idfModel)
 
         return representation1, representation2
-

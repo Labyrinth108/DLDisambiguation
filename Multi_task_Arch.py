@@ -43,21 +43,23 @@ for attr, value in sorted(FLAGS.__flags.items()):
 print("")
 
 
+def generate_Tensor(mention, entity, max_len, task_n):
+    tensor = Tensor(mention, entity, len(mention), max_len, task_n).get_tensor()
+    tensor = tensor.transpose((0, 2, 3, 1))
+    return tensor
+
+
 def prepara_tensor_y(inputH, file, max_len):
-    x_train_mention, x_train_entity, y_train, x_dev_mention, x_dev_entity, y_dev = inputH.splitDataSets(file, 30,
-                                                                                                        max_len)
+    x1_train, x2_train, x3_train, x4_train, y_train, y2_train, \
+    x1_dev, x2_dev, x3_dev, x4_dev, y_dev, y2_dev = inputH.splitMulti_DataSets(file, 30, max_len)
 
-    x_train_tensor = Tensor(x_train_mention, x_train_entity, len(x_train_entity), max_len).get_tensor()
-    x_train_tensor = x_train_tensor.transpose((0, 2, 3, 1))
+    x_train_tensor = generate_Tensor(x1_train, x2_train, max_len, 1)
+    x_dev_tensor = generate_Tensor(x1_dev, x2_dev, max_len, 1)
 
-    y_train = np.array([[0, 1] if x == 1 else [1, 0] for x in y_train])
+    x_train_tensor_o = generate_Tensor(x3_train, x4_train, max_len, 2)
+    x_dev_tensor_o = generate_Tensor(x3_dev, x4_dev, max_len, 2)
 
-    x_dev_tensor = Tensor(x_dev_mention, x_dev_entity, len(x_dev_entity), max_len).get_tensor()
-    x_dev_tensor = x_dev_tensor.transpose((0, 2, 3, 1))
-
-    y_dev = np.array([[0, 1] if x == 1 else [1, 0] for x in y_dev])
-
-    return x_train_tensor, y_train, x_dev_tensor, y_dev
+    return x_train_tensor, y_train, x_dev_tensor, y_dev, x_train_tensor_o, y2_train, x_dev_tensor_o, y2_dev
 
 
 def main():
@@ -65,13 +67,11 @@ def main():
     print("Loading data...")
     inputH = InputHelper()
 
-    data1_f = os.path.join(FLAGS.train_dir, 'data/testing_data.txt')
-    data2_f = os.path.join(FLAGS.train_dir, 'data/testing_data.txt')
-    # data1_f = os.path.join(FLAGS.train_dir, 'data/toy_data.txt')
-    # data2_f = os.path.join(FLAGS.train_dir, 'data/toy_data.txt')
+    data_f = os.path.join(FLAGS.train_dir, 'data/toy_mul')
+    # data_f = os.path.join(FLAGS.train_dir, 'data/train_data_0720')
 
-    x_train_tensor, y_train, x_dev_tensor, y_dev = prepara_tensor_y(inputH, data1_f, FLAGS.max_sequence_len)
-    x_train_tensor_o, y_train_o, x_dev_tensor_o, y_dev_o = prepara_tensor_y(inputH, data2_f, FLAGS.max_sequence_len)
+    x_train_tensor, y_train, x_dev_tensor, y_dev, x_train_tensor_o, y_train_o, x_dev_tensor_o, y_dev_o \
+        = prepara_tensor_y(inputH, data_f, FLAGS.max_sequence_len)
 
     with tf.Graph().as_default():
 
@@ -135,11 +135,12 @@ def main():
                 }
                 _, step, summaries, loss, accuracy1, accuracy2 = sess.run(
                     [train_op, global_step, train_summary_op, cnn.loss, cnn.accuracy_d, cnn.accuracy_o],
-                    # [train_op, global_step, train_summary_op, cnn.loss, cnn.accuracy_d, cnn.accuracy_o],
                     feed_dict)
                 time_str = datetime.datetime.now().isoformat()
                 if step % 10 == 0:
-                    print("{}: step {}, loss {:g}, acc1 {:g}, acc2 {:g}".format(time_str, step, loss, accuracy1, accuracy2))
+                    print(
+                        "{}: step {}, loss {:g}, acc1 {:g}, acc2 {:g}".format(time_str, step, loss, accuracy1,
+                                                                              accuracy2))
                 train_summary_writer.add_summary(summaries, step)
 
             def dev_step(x_dev, y_batch_dev, x_dev2, y_batch_dev2, writer=None):
@@ -152,7 +153,6 @@ def main():
                 }
                 step, summaries, loss, accuracy1, accuracy2, pres1, pres2 = sess.run(
                     [global_step, dev_summary_op, cnn.loss, cnn.accuracy_d, cnn.accuracy_o, cnn.scores_d, cnn.scores_o],
-                    # [global_step, dev_summary_op, cnn.loss, cnn.accuracy_d, cnn.accuracy_o, cnn.scores_d, cnn.scores_o],
                     feed_dict)
                 if writer:
                     writer.add_summary(summaries, step)
@@ -186,16 +186,17 @@ def main():
                 return True
 
             # Generate batches
-            batches = inputH.batch_iter(list(zip(x_train_tensor, y_train)), FLAGS.batch_size, FLAGS.num_epochs)
-            batches2 = inputH.batch_iter(list(zip(x_train_tensor_o, y_train_o)), FLAGS.batch_size, FLAGS.num_epochs)
+            batches = inputH.batch_iter(list(zip(x_train_tensor, y_train, x_train_tensor_o, y_train_o)),
+                                        FLAGS.batch_size, FLAGS.num_epochs)
+            # batches2 = inputH.batch_iter(list(zip(x_train_tensor_o, y_train_o)), FLAGS.batch_size, FLAGS.num_epochs)
 
             # Training loop. For each batch...
             dev_loss = []
             dev_loss2 = []
-            batch_d_o = zip(batches, batches2)
-            for batch, batch2 in batch_d_o:
-                x_batch, y_batch = zip(*batch)
-                x_batch2, y_batch2 = zip(*batch2)
+            # batch_d_o = zip(batches, batches2)
+            for batch in batches:
+                x_batch, y_batch, x_batch2, y_batch2 = zip(*batch)
+                # x_batch2, y_batch2 = zip(*batch2)
 
                 train_step(x_batch, y_batch, x_batch2, y_batch2)
                 current_step = tf.train.global_step(sess, global_step)
@@ -203,7 +204,8 @@ def main():
                 if current_step % FLAGS.evaluate_every == 0:
 
                     print("\nEvaluation:")
-                    loss, accuracy1, accuracy2 = dev_whole(x_dev_tensor, y_dev, x_dev_tensor_o, y_dev_o, writer=dev_summary_writer)
+                    loss, accuracy1, accuracy2 = dev_whole(x_dev_tensor, y_dev, x_dev_tensor_o, y_dev_o,
+                                                           writer=dev_summary_writer)
 
                     time_str = datetime.datetime.now().isoformat()
                     print("{}: dev-aver, loss {:g}, acc {:g}, acc2 {:g}".format(time_str, loss, accuracy1, accuracy2))

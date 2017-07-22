@@ -23,6 +23,9 @@ def generateProcessedCorpusFile(src_file_path, character_file_path, word_file_pa
     file = codecs.open(src_file_path, "r")
     line = file.readline()
 
+    character_file = codecs.open(character_file_path, "w+", "utf-8")
+    word_file = codecs.open(word_file_path, "w+", "utf-8")
+
     while line != "":
         d = line.strip().decode("utf-8")
         # 处理"无"，"NA"."NULL".""的情况
@@ -30,7 +33,6 @@ def generateProcessedCorpusFile(src_file_path, character_file_path, word_file_pa
             data.append(d)
         line = file.readline()
 
-    character_file = codecs.open(character_file_path, "w+", "utf-8")
     for i in data:
         res = preprocess_unit(i)
         characters = list("".join(res))
@@ -39,8 +41,6 @@ def generateProcessedCorpusFile(src_file_path, character_file_path, word_file_pa
         character_file.write(" ".join(characters) + "\n")
     character_file.close()
     print("Finished character model!")
-
-    word_file = codecs.open(word_file_path, "w+", "utf-8")
 
     for i in data:
         res = preprocess_unit(i)
@@ -86,10 +86,10 @@ def get_IDF(corpus_file, idf_file):
     name_idf_dict = dict(zip(vectorizer.get_feature_names(), idf))
 
     # write IDF_Model
-    file = open(idf_file, "w+")
+    idf_file = open(idf_file, "w+")
     for k, v in name_idf_dict.items():
-        file.write(k.encode("utf-8") + ":" + str(v) + "\n")
-    file.close()
+        idf_file.write(k.encode("utf-8") + ":" + str(v) + "\n")
+    idf_file.close()
     print("IDF_Model Finished!")
 
 
@@ -101,12 +101,17 @@ class MySentences(object):
         for line in open(self.fname):
             yield line.split()
 
+
 def checkPath(x):
     if not os.path.exists(x):
         open(x, 'a').close()
 
-def compute_word2vec(src_file, model_file, wv_file):
+
+def compute_word2vec(embedding_dir, type):
     load_model_flag = False
+    src_file = embedding_dir + type + "_src.txt"
+    model_file = embedding_dir + type + '.model'
+    wv_file = embedding_dir + type + 'character_model.txt'
 
     if not load_model_flag:
         sentences = MySentences(src_file)  # a memory-friendly iterator
@@ -119,35 +124,29 @@ def compute_word2vec(src_file, model_file, wv_file):
         model.wv.save_word2vec_format(wv_file, binary=False)  # save word2vec txt
         print("Word2vec model finished!\n")
     else:
-        model = gensim.models.Word2Vec.load(character_model_file)  # load in model
+        model = gensim.models.Word2Vec.load(model_file)  # load in model
 
 
 if __name__ == "__main__":
 
     corpus_file = "../data/d2013_operation.txt"
+    idf_model = "../data/idfModel_operation.txt"
+
     # corpus_file = "../data/db_description_d2013.txt"
-    # idf_model = "./data/idfModel.txt"
+    # idf_model = "../data/idfModel.txt"
 
-    # character_src_file = "../data/word2vec_new/character_src.txt"
-    # character_model_file = '../data/word2vec_new/character.model'
-    # character_wv_file = '../data/word2vec_new/character_model.txt'
-    #
-    # word_src_file = "../data/word2vec_new/word_src.txt"
-    # word_model_file = '../data/word2vec_new/word.model'
-    # word_wv_file = '../data/word2vec_new/word_model.txt'
+    task_num = 1
+    if task_num == 1:
+        embedding_dir = "../data/word2vec_new/"
+    else:
+        embedding_dir = "../data/operation/"
 
-    character_src_file = "../data/operation/character_src.txt"
-    character_model_file = '../data/operation/character.model'
-    character_wv_file = '../data/operation/character_model.txt'
-
-    word_src_file = "../data/operation/word_src.txt"
-    word_model_file = '../data/operation/word.model'
-    word_wv_file = '../data/operation/word_model.txt'
-
-    # get_IDF(corpus_file, idf_model)
+    # generate IDF Model
+    get_IDF(corpus_file, idf_model)
 
     # produce character_src_file and word_src_file from corpus file
     # generateProcessedCorpusFile(corpus_file, character_src_file, word_src_file)
 
-    compute_word2vec(character_src_file, character_model_file, character_wv_file)
-    compute_word2vec(word_src_file, word_model_file, word_wv_file)
+    # generate word2vec for characters and words
+    # compute_word2vec(embedding_dir, "character")
+    # compute_word2vec(embedding_dir, "word")

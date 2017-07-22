@@ -31,7 +31,7 @@ tf.flags.DEFINE_integer("most_words", 300000, "Most number of words in vocab (de
 tf.flags.DEFINE_integer("seed", 123, "Random seed (default: 123)")
 tf.flags.DEFINE_string("train_dir", "./", "Training dir root")
 tf.flags.DEFINE_integer("batch_size", 128, "Batch Size (default: 64)")
-tf.flags.DEFINE_integer("num_epochs", 50, "Number of training epochs")
+tf.flags.DEFINE_integer("num_epochs", 5, "Number of training epochs")
 tf.flags.DEFINE_float("eval_split", 0.1, "Use how much data for evaluating (default: 0.1)")
 tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model on dev set after this many steps (default: 100)")
 tf.flags.DEFINE_integer("checkpoint_every", 100, "Save model after this many steps (default: 100)")
@@ -54,21 +54,24 @@ def main():
     # x_dev_mention, x_dev_entity, y_dev = inputH.getTsvTestData(
     #     os.path.join(FLAGS.train_dir, 'data/test0.txt'))
 
-    # x_train_mention, x_train_entity, y_train, x_dev_mention, x_dev_entity, y_dev = inputH.splitDataSets(
-    #     os.path.join(FLAGS.train_dir, 'data/new_training_data_.txt'), 30, FLAGS.max_sequence_len)  # 30---percent_test--30%
+    # data_file = os.path.join(FLAGS.train_dir, 'data/toy_data.txt') # 测试用
+    # data_file = os.path.join(FLAGS.train_dir, 'data/testing_data.txt') # description -- 自己生成的--小
+    # data_file = os.path.join(FLAGS.train_dir, 'data/training_data.txt')  # description-自己生成的--大
 
+    # data_file = os.path.join(FLAGS.train_dir, 'data/train_data_0720_operation.txt') # operation
+    data_file = os.path.join(FLAGS.train_dir, 'data/new_training_data_.txt')  # description
+
+    task_num = 1
     x_train_mention, x_train_entity, y_train, x_dev_mention, x_dev_entity, y_dev = inputH.splitDataSets(
-        # os.path.join(FLAGS.train_dir, 'data/toy_data.txt'), 30, FLAGS.max_sequence_len)  # 30---percent_test--30%
-        # os.path.join(FLAGS.train_dir, 'data/testing_data.txt'), 30, FLAGS.max_sequence_len)  # 30---percent_test--30%
-        os.path.join(FLAGS.train_dir, 'data/training_data.txt'), 30, FLAGS.max_sequence_len)  # 30---percent_test--30%
+        data_file, 30, FLAGS.max_sequence_len)  # 30---percent_test--30%
 
-    x_train_tensor = Tensor(x_train_mention, x_train_entity, len(x_train_entity), FLAGS.max_sequence_len).get_tensor()
+    x_train_tensor = Tensor(x_train_mention, x_train_entity, len(x_train_entity), FLAGS.max_sequence_len,
+                            task_num).get_tensor()
     x_train_tensor = x_train_tensor.transpose((0, 2, 3, 1))
-    y_train = np.array([[0, 1] if x == 1 else [1, 0] for x in y_train])
 
-    x_dev_tensor = Tensor(x_dev_mention, x_dev_entity, len(x_dev_mention), FLAGS.max_sequence_len).get_tensor()
+    x_dev_tensor = Tensor(x_dev_mention, x_dev_entity, len(x_dev_mention), FLAGS.max_sequence_len,
+                          task_num).get_tensor()
     x_dev_tensor = x_dev_tensor.transpose((0, 2, 3, 1))
-    y_dev = np.array([[0, 1] if x == 1 else [1, 0] for x in y_dev])
 
     with tf.Graph().as_default():
 

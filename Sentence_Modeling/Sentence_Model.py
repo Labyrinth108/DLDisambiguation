@@ -12,7 +12,8 @@ import os
 tf.flags.DEFINE_integer("embedding_dim", 100, "Dimensionality of character embedding")
 tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout keep probability (default: 0.5)")
 tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularizaion lambda (default: 0.0)")
-tf.flags.DEFINE_string("training_files", "../data/new_training_data_.txt", "training file (default: None)")
+# tf.flags.DEFINE_string("training_files", "../data/new_training_data_.txt", "training file (default: None)")
+tf.flags.DEFINE_string("training_files", "../data/train_data_0720_operation.txt", "training file (default: None)")
 # tf.flags.DEFINE_string("training_files", "../data/1976data.txt", "training file (default: None)")
 # tf.flags.DEFINE_string("training_files", "../data/923data.txt", "training file (default: None)")
 
