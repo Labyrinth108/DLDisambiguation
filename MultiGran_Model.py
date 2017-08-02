@@ -32,7 +32,7 @@ class MultiGranModel(object):
         channel_num = 4
 
         # Placeholders for input, output and dropout
-        self.input_tensor = tf.placeholder(tf.float32, [None, max_len, max_len, 4], name="input_tensor")
+        self.input_tensor = tf.placeholder(tf.float32, [None, max_len, max_len, channel_num], name="input_tensor")
         self.input_y = tf.placeholder(tf.float32, [None, 2], name="input_y")
         self.dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
 
@@ -59,9 +59,12 @@ class MultiGranModel(object):
             conv1 = self._conv('conv1', view, filter_shape1, reuse=reuse_f)
             pool1 = self._maxpool('pool1', conv1, ksize=p_size1, strides=[1, 1, 1, 1])
 
+            # dim = np.prod(pool1.get_shape().as_list()[1:])
+            # reshape = tf.reshape(pool1, [-1, dim])
+
             conv2 = self._conv('conv2', pool1, filter_shape2, reuse=reuse_f)
             pool2 = self._maxpool('pool2', conv2, ksize=p_size2, strides=[1, 1, 1, 1])
-
+            # pool2 = pool1
             dim = np.prod(pool2.get_shape().as_list()[1:])
             reshape = tf.reshape(pool2, [-1, dim])
 
@@ -73,25 +76,33 @@ class MultiGranModel(object):
             reshape = tf.reshape(x, [-1, 4])
             print reshape.get_shape().as_list()
 
-            Weights = tf.Variable(tf.random_uniform([4, 1], 0, 1.0), name="W")
+            Weights = tf.Variable(tf.truncated_normal([4, 1], 0, 1.0), name="W")
 
             y = tf.matmul(reshape, Weights, name="view_pooling")
             y = tf.reshape(y, [-1, dim])
             print y.get_shape().as_list()
+            print("DIM:!" + str(dim))
 
         # Add dropout
         with tf.name_scope("dropout"):
             self.h_drop = tf.nn.dropout(y, self.dropout_keep_prob, name="hidden_output_drop")
             print self.h_drop.get_shape().as_list()
 
+        with tf.name_scope("fc"):
+            W = tf.Variable(name="W", initial_value=tf.truncated_normal(shape=[dim, dim / 4], stddev=0.1))
+            b = tf.Variable(tf.constant(0.1, shape=[dim / 4]), name="b")
+
+            self.fc = tf.nn.relu(tf.matmul(self.h_drop, W) + b)
+            self.fc_drop = tf.nn.dropout(self.fc, self.dropout_keep_prob)
+
         # Final (unnormalized) scores and predictions
         with tf.name_scope("output"):
-            W = tf.Variable(name="W_output", initial_value=tf.random_normal(shape=[dim, 2], stddev=0.1))
+            W = tf.Variable(name="W_output", initial_value=tf.truncated_normal(shape=[dim / 4, 2], stddev=0.1))
             b = tf.Variable(tf.constant(0.1, shape=[2]), name="b")
 
             l2_loss += tf.nn.l2_loss(W)
             l2_loss += tf.nn.l2_loss(b)
-            self.scores = tf.nn.xw_plus_b(self.h_drop, W, b, name="scores")
+            self.scores = tf.nn.xw_plus_b(self.fc_drop, W, b, name="scores")
             self.predictions = tf.argmax(self.scores, 1, name="predictions")
 
         # Calculate Mean cross-entropy loss

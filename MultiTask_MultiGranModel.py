@@ -28,12 +28,12 @@ class MultiTask_MultiGranModel(object):
         print name, pool.get_shape().as_list()
         return pool
 
-    def __init__(self, max_len, filter_sizes, num_filters, l2_reg_lambda=0.0):
+    def __init__(self, max_len1, max_len2, filter_sizes, num_filters, l2_reg_lambda=0.0):
         channel_num = 4
 
         # Placeholders for input, output and dropout
-        self.input_tensor = tf.placeholder(tf.float32, [None, max_len, max_len, 4], name="input_tensor_description")
-        self.input_tensor_o = tf.placeholder(tf.float32, [None, max_len, max_len, 4], name="input_tensor_operation")
+        self.input_tensor = tf.placeholder(tf.float32, [None, max_len1, max_len1, 4], name="input_tensor_description")
+        self.input_tensor_o = tf.placeholder(tf.float32, [None, max_len2, max_len2, 4], name="input_tensor_operation")
 
         self.input_y_description = tf.placeholder(tf.float32, [None, 2], name="input_y_description")
         self.input_y_operation = tf.placeholder(tf.float32, [None, 2], name="input_y_operation")
@@ -74,8 +74,8 @@ class MultiTask_MultiGranModel(object):
                     conv2 = self._conv('conv2', pool1, filter_shape2, reuse=reuse_f)
                     pool2 = self._maxpool('pool2', conv2, ksize=p_size2, strides=[1, 1, 1, 1])
 
-                    dim = np.prod(pool2.get_shape().as_list()[1:])
-                    reshape = tf.reshape(pool2, [-1, dim])
+                    dim1 = np.prod(pool2.get_shape().as_list()[1:])
+                    reshape = tf.reshape(pool2, [-1, dim1])
 
                     pooled_outputs.append(reshape)
 
@@ -98,8 +98,8 @@ class MultiTask_MultiGranModel(object):
                     conv2 = self._conv('conv2', pool1, filter_shape2, reuse=reuse_f)
                     pool2 = self._maxpool('pool2', conv2, ksize=p_size2, strides=[1, 1, 1, 1])
 
-                    dim = np.prod(pool2.get_shape().as_list()[1:])
-                    reshape = tf.reshape(pool2, [-1, dim])
+                    dim2 = np.prod(pool2.get_shape().as_list()[1:])
+                    reshape = tf.reshape(pool2, [-1, dim2])
 
                     pooled_outputs_operation.append(reshape)
 
@@ -112,7 +112,7 @@ class MultiTask_MultiGranModel(object):
             Weights = tf.Variable(tf.random_uniform([4, 1], 0.0, 1.0), name="W")
 
             y_d = tf.matmul(reshape, Weights, name="view_pooling")
-            y_d = tf.reshape(y_d, [-1, dim])
+            y_d = tf.reshape(y_d, [-1, dim1])
             print y_d.get_shape().as_list()
 
         with tf.name_scope("Operation_view_pooling"):
@@ -124,7 +124,7 @@ class MultiTask_MultiGranModel(object):
             Weights = tf.Variable(tf.random_uniform([4, 1], 0.0, 1.0), name="W")
 
             y_o = tf.matmul(reshape, Weights, name="view_pooling")
-            y_o = tf.reshape(y_o, [-1, dim])
+            y_o = tf.reshape(y_o, [-1, dim2])
             print y_o.get_shape().as_list()
 
         # Add dropout
@@ -134,32 +134,53 @@ class MultiTask_MultiGranModel(object):
             print self.h_drop_d.get_shape().as_list()
             print self.h_drop_o.get_shape().as_list()
 
+        with tf.name_scope("FC"):
+            dim = 100
+            W1 = tf.Variable(name="W", initial_value=tf.truncated_normal(shape=[dim1, dim], stddev=0.1))
+            b1 = tf.Variable(tf.constant(0.1, shape=[dim]), name="b")
+
+            self.fc_d = tf.nn.relu(tf.matmul(self.h_drop_d, W1) + b1)
+            self.fc_drop_d = tf.nn.dropout(self.fc_d, self.dropout_keep_prob)
+
+            W2 = tf.Variable(name="W", initial_value=tf.truncated_normal(shape=[dim2, dim], stddev=0.1))
+            b2 = tf.Variable(tf.constant(0.1, shape=[dim]), name="b")
+
+            self.fc_o = tf.nn.relu(tf.matmul(self.h_drop_o, W2) + b2)
+            self.fc_drop_o = tf.nn.dropout(self.fc_o, self.dropout_keep_prob)
+
         # Share Layer Construction
         with tf.name_scope("Multitask"):
 
-            self.shared_layer = tf.div(tf.add(self.h_drop_d, self.h_drop_o), 2, name="Shared_layer")
+            self.shared_layer = tf.div(tf.add(self.fc_drop_d, self.fc_drop_o), 2, name="Shared_layer")
+            # self.shared_layer = tf.div(tf.add(self.h_drop_d, self.h_drop_o), 2, name="Shared_layer")
             print self.shared_layer.get_shape().as_list()
 
-            W1 = tf.Variable(name="tt1_W", initial_value=tf.random_normal([dim], stddev=0.1))
-            W2 = tf.Variable(name="st1_W", initial_value=tf.random_normal([dim], stddev=0.1))
-            W3 = tf.Variable(name="st2_W", initial_value=tf.random_normal([dim], stddev=0.1))
-            W4 = tf.Variable(name="tt2_W", initial_value=tf.random_normal([dim], stddev=0.1))
+            W1 = tf.get_variable(name="tt1_W", shape=[dim],
+                                 initializer=tf.truncated_normal_initializer(stddev=0.1))
+            W2 = tf.get_variable(name="st1_W", shape=[dim],
+                                 initializer=tf.truncated_normal_initializer(stddev=0.1))
+            W3 = tf.get_variable(name="st2_W", shape=[dim],
+                                 initializer=tf.truncated_normal_initializer(stddev=0.1))
+            W4 = tf.get_variable(name="tt2_W", shape=[dim],
+                                 initializer=tf.truncated_normal_initializer(stddev=0.1))
 
-            self.task1_r = tf.add(tf.multiply(self.shared_layer, W2), tf.multiply(self.h_drop_d, W1),
+            self.task1_r = tf.add(tf.multiply(self.shared_layer, W2), tf.multiply(self.fc_drop_d, W1),
                                   name="description_r")
-            self.task2_r = tf.add(tf.multiply(self.shared_layer, W3), tf.multiply(self.h_drop_o, W4),
+            self.task2_r = tf.add(tf.multiply(self.shared_layer, W3), tf.multiply(self.fc_drop_o, W4),
                                   name="operation_r")
             print self.task1_r.get_shape().as_list()
 
         # Final (unnormalized) scores and predictions
         with tf.name_scope("output"):
-            W_d = tf.Variable(name="W_output_d", initial_value=tf.random_normal([dim, 2], stddev=0.1))
+            W_d = tf.get_variable(name="W_d", shape=[dim, 2], initializer=tf.truncated_normal_initializer(stddev=0.1))
             b_d = tf.Variable(tf.constant(0.1, shape=[2]), name="b_d")
 
             l2_loss_d += tf.nn.l2_loss(W_d)
             l2_loss_d += tf.nn.l2_loss(b_d)
 
-            W_o = tf.Variable(name="W_output_o", initial_value=tf.random_normal([dim, 2], stddev=0.1))
+            # W_o = tf.Variable(name="W_output_o", initial_value=tf.random_normal([dim, 2], stddev=0.1))
+            W_o = tf.get_variable(name="W_o", shape=[dim, 2],
+                                  initializer=tf.truncated_normal_initializer(stddev=0.1))
             b_o = tf.Variable(tf.constant(0.1, shape=[2]), name="b_o")
 
             l2_loss_operation += tf.nn.l2_loss(W_o)
@@ -167,6 +188,7 @@ class MultiTask_MultiGranModel(object):
 
             self.scores_d = tf.nn.xw_plus_b(self.task1_r, W_d, b_d, name="scores1")
             self.scores_o = tf.nn.xw_plus_b(self.task2_r, W_o, b_o, name="scores2")
+
             self.predictions_d = tf.argmax(self.scores_d, 1, name="predictions1")
             self.predictions_o = tf.argmax(self.scores_o, 1, name="predictions2")
 

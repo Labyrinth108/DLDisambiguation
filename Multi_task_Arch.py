@@ -8,6 +8,7 @@ import time
 import numpy as np
 import tensorflow as tf
 
+from util.util import write_evaluation_file_multi, write_evaluation_file
 from DLDisambiguation.util.input_helpers import InputHelper
 from MultiTask_MultiGranModel import MultiTask_MultiGranModel
 from tensor import Tensor
@@ -18,12 +19,13 @@ from tensor import Tensor
 # Model Hyperparameters
 tf.flags.DEFINE_integer("embedding_dim", 100, "Dimensionality of character embedding (default: 100)")
 tf.flags.DEFINE_string("filter_sizes", "2,3", "Comma-separated filter sizes (default: '2,3')")
-tf.flags.DEFINE_integer("num_filters", 64, "Number of filters per filter size (default: 64)")
+tf.flags.DEFINE_integer("num_filters", 16, "Number of filters per filter size (default: 64)")
 tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout keep probability (default: 0.5)")
 tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularizaion lambda (default: 0.0)")
 
 # Data Parameter
 tf.flags.DEFINE_integer("max_sequence_len", 20, "max document length of input")
+tf.flags.DEFINE_integer("max_sequence_len2", 20, "max document length of input")
 tf.flags.DEFINE_integer("most_words", 300000, "Most number of words in vocab (default: 300000)")
 
 # Training parameters
@@ -43,23 +45,41 @@ for attr, value in sorted(FLAGS.__flags.items()):
 print("")
 
 
-def generate_Tensor(mention, entity, max_len, task_n):
-    tensor = Tensor(mention, entity, len(mention), max_len, task_n).get_tensor()
+def generate_Tensor(mention, entity, mention2, entity2, mention3, entity3, max_len, task_n):
+    lstm_dir = "Description1501058401" if task_n == 1 else "Operation1501000120"
+    bilstm_dir = os.path.join("./Sentence_Modeling/runs", lstm_dir)
+
+    tensor = Tensor(mention + mention2 + mention3, entity + entity2 + entity3, len(mention + mention2 + mention3),
+                    max_len, task_n, bilstm_dir).get_tensor()
     tensor = tensor.transpose((0, 2, 3, 1))
-    return tensor
+
+    g1 = len(mention)
+    g2 = len(mention + mention2)
+    return tensor[:g1], tensor[g1:g2], tensor[g2:]
 
 
-def prepara_tensor_y(inputH, file, max_len):
-    x1_train, x2_train, x3_train, x4_train, y_train, y2_train, \
-    x1_dev, x2_dev, x3_dev, x4_dev, y_dev, y2_dev = inputH.splitMulti_DataSets(file, 30, max_len)
+def prepara_tensor_y(inputH, training_path, dev_path, test_path, max_len):
+    sep = "\t"
+    x1_train, x2_train, x3_train, x4_train, y_train, y2_train = inputH.getTsvTestData_Mul(training_path, sep, max_len)
+    x1_dev, x2_dev, x3_dev, x4_dev, y_dev, y2_dev = inputH.getTsvTestData_Mul(dev_path, sep, max_len)
+    x1_test, x2_test, x3_test, x4_test, y_test, y2_test = inputH.getTsvTestData_Mul(test_path, sep, max_len)
 
-    x_train_tensor = generate_Tensor(x1_train, x2_train, max_len, 1)
-    x_dev_tensor = generate_Tensor(x1_dev, x2_dev, max_len, 1)
+    x_train_tensor, x_dev_tensor, x_test_tensor = generate_Tensor(x1_train, x2_train, x1_dev, x2_dev, x1_test, x2_test,
+                                                                  max_len, 1)
 
-    x_train_tensor_o = generate_Tensor(x3_train, x4_train, max_len, 2)
-    x_dev_tensor_o = generate_Tensor(x3_dev, x4_dev, max_len, 2)
+    x_train_tensor_o, x_dev_tensor_o, x_test_tensor_o = generate_Tensor(x3_train, x4_train, x3_dev, x4_dev, x3_test,
+                                                                        x4_test, max_len, 2)
 
-    return x_train_tensor, y_train, x_dev_tensor, y_dev, x_train_tensor_o, y2_train, x_dev_tensor_o, y2_dev
+    np.save("train_des", x_train_tensor)
+    np.save("dev_des", x_dev_tensor)
+    np.save("test_des", x_test_tensor)
+
+    np.save("train_opr", x_train_tensor_o)
+    np.save("dev_opr", x_dev_tensor_o)
+    np.save("test_opr", x_test_tensor_o)
+
+    return x_train_tensor, y_train, x_dev_tensor, y_dev, x_test_tensor, y_test, \
+           x_train_tensor_o, y2_train, x_dev_tensor_o, y2_dev, x_test_tensor_o, y2_test
 
 
 def main():
@@ -67,18 +87,37 @@ def main():
     print("Loading data...")
     inputH = InputHelper()
 
-    data_f = os.path.join(FLAGS.train_dir, 'data/toy_mul')
-    # data_f = os.path.join(FLAGS.train_dir, 'data/train_data_0720')
+    train_f = os.path.join(FLAGS.train_dir, 'data/exp/training_data_0724.txt')
+    dev_f = os.path.join(FLAGS.train_dir, 'data/exp/validation_data_0724.txt')
+    test_f = os.path.join(FLAGS.train_dir, 'data/exp/test_data_0724.txt')
 
-    x_train_tensor, y_train, x_dev_tensor, y_dev, x_train_tensor_o, y_train_o, x_dev_tensor_o, y_dev_o \
-        = prepara_tensor_y(inputH, data_f, FLAGS.max_sequence_len)
+    # x_train_tensor, y_train, x_dev_tensor, y_dev, x_test_tensor, y_test, \
+    # x_train_tensor_o, y2_train, x_dev_tensor_o, y2_dev, x_test_tensor_o, y2_test = prepara_tensor_y(inputH, train_f,
+    #                                                                                                 dev_f, test_f,
+    #                                                                                                 FLAGS.max_sequence_len)
+    our_dir = "./Length" + str(FLAGS.max_sequence_len) + "/"
+    x_train_tensor = np.load(our_dir + "train_des.npy")
+    x_dev_tensor = np.load(our_dir + "dev_des.npy")
+    x_test_tensor = np.load(our_dir + "test_des.npy")
+
+    our_dir = "./Length" + str(FLAGS.max_sequence_len2) + "/"
+    x_train_tensor_o = np.load(our_dir + "train_opr.npy")
+    x_dev_tensor_o = np.load(our_dir + "dev_opr.npy")
+    x_test_tensor_o = np.load(our_dir + "test_opr.npy")
+
+    sep = "\t"
+    x1_train, x2_train, x3_train, x4_train, y_train, y2_train = inputH.getTsvTestData_Mul(train_f, sep,
+                                                                                          FLAGS.max_sequence_len)
+    x1_dev, x2_dev, x3_dev, x4_dev, y_dev, y2_dev = inputH.getTsvTestData_Mul(dev_f, sep, FLAGS.max_sequence_len)
+    x1_test, x2_test, x3_test, x4_test, y_test, y2_test = inputH.getTsvTestData_Mul(test_f, sep, FLAGS.max_sequence_len)
 
     with tf.Graph().as_default():
 
         sess = tf.Session()
         with sess.as_default():
             cnn = MultiTask_MultiGranModel(
-                max_len=FLAGS.max_sequence_len,
+                max_len1=FLAGS.max_sequence_len,
+                max_len2=FLAGS.max_sequence_len2,
                 filter_sizes=list(map(int, FLAGS.filter_sizes.split(","))),
                 num_filters=FLAGS.num_filters,
                 l2_reg_lambda=FLAGS.l2_reg_lambda)
@@ -105,7 +144,11 @@ def main():
             if not os.path.exists(out_dir):
                 os.makedirs(out_dir)
             print("Writing to {}\n".format(out_dir))
-            checkpoint_prefix = os.path.join(out_dir, "model")
+
+            checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
+            checkpoint_prefix = os.path.join(checkpoint_dir, "model")
+            if not os.path.exists(checkpoint_dir):
+                os.makedirs(checkpoint_dir)
 
             # Summaries for loss and accuracy
             loss_summary = tf.summary.scalar("loss", cnn.loss)
@@ -158,6 +201,41 @@ def main():
                     writer.add_summary(summaries, step)
                 return loss, accuracy1, accuracy2
 
+            def evaluate(x_dev, y_batch_dev, x_dev2, y_batch_dev2):
+                feed_dict = {
+                    cnn.input_tensor: x_dev,
+                    cnn.input_y_description: y_batch_dev,
+                    cnn.dropout_keep_prob: 1.0,
+                    cnn.input_y_operation: y_batch_dev2,
+                    cnn.input_tensor_o: x_dev2,
+                }
+
+                step, summaries, loss, accuracy1, accuracy2, pres1, pres2 = sess.run(
+                    [global_step, dev_summary_op, cnn.loss, cnn.accuracy_d, cnn.accuracy_o, cnn.scores_d, cnn.scores_o],
+                    feed_dict)
+
+                eval_file = open(out_dir + "/evaluation.txt", "w+")
+                right_file = open(out_dir + "/right_cases.txt", "w+")
+                right_file2 = open(out_dir + "/right_cases_operation.txt", "w+")
+                wrong_file = open(out_dir + "/wrong_cases.txt", "w+")
+                wrong_file2 = open(out_dir + "/wrong_cases_operation.txt", "w+")
+
+                eval_file.write("Accu1: " + str(accuracy1) + "\n")
+                eval_file.write("Accu2: " + str(accuracy2) + "\n")
+
+                predictions1 = np.argmax(pres1, 1)
+                predictions2 = np.argmax(pres2, 1)
+                labels1 = np.argmax(y_batch_dev, 1)
+                labels2 = np.argmax(y_batch_dev2, 1)
+                write_evaluation_file(eval_file, right_file, wrong_file, labels1, predictions1, x1_test, x2_test)
+                write_evaluation_file(eval_file, right_file2, wrong_file2, labels2, predictions2, x3_test, x4_test)
+
+                eval_file.write("Parameters:")
+                for attr, value in sorted(FLAGS.__flags.items()):
+                    eval_file.write("{}={}".format(attr.upper(), value) + "\n")
+
+                return loss, accuracy1, accuracy2
+
             def dev_whole(x_dev, y_dev, x_dev2, y_dev2, writer=None):
                 batches_dev = inputH.batch_iter(list(zip(x_dev, y_dev)), FLAGS.batch_size, 1, shuffle=False)
                 batches_dev2 = inputH.batch_iter(list(zip(x_dev2, y_dev2)), FLAGS.batch_size, 1, shuffle=False)
@@ -186,9 +264,8 @@ def main():
                 return True
 
             # Generate batches
-            batches = inputH.batch_iter(list(zip(x_train_tensor, y_train, x_train_tensor_o, y_train_o)),
+            batches = inputH.batch_iter(list(zip(x_train_tensor, y_train, x_train_tensor_o, y2_train)),
                                         FLAGS.batch_size, FLAGS.num_epochs)
-            # batches2 = inputH.batch_iter(list(zip(x_train_tensor_o, y_train_o)), FLAGS.batch_size, FLAGS.num_epochs)
 
             # Training loop. For each batch...
             dev_loss = []
@@ -196,7 +273,6 @@ def main():
             # batch_d_o = zip(batches, batches2)
             for batch in batches:
                 x_batch, y_batch, x_batch2, y_batch2 = zip(*batch)
-                # x_batch2, y_batch2 = zip(*batch2)
 
                 train_step(x_batch, y_batch, x_batch2, y_batch2)
                 current_step = tf.train.global_step(sess, global_step)
@@ -204,7 +280,7 @@ def main():
                 if current_step % FLAGS.evaluate_every == 0:
 
                     print("\nEvaluation:")
-                    loss, accuracy1, accuracy2 = dev_whole(x_dev_tensor, y_dev, x_dev_tensor_o, y_dev_o,
+                    loss, accuracy1, accuracy2 = dev_whole(x_dev_tensor, y_dev, x_dev_tensor_o, y2_dev,
                                                            writer=dev_summary_writer)
 
                     time_str = datetime.datetime.now().isoformat()
@@ -227,6 +303,11 @@ def main():
                 if current_step % FLAGS.checkpoint_every == 0:
                     path = saver.save(sess, checkpoint_prefix, global_step=current_step)
                     print("Saved model checkpoint to {}\n".format(path))
+
+            loss, accuracy1, accuracy2 = evaluate(x_test_tensor, y_test, x_test_tensor_o, y2_test)
+            print(loss)
+            print(accuracy1)
+            print(accuracy2)
 
 
 if __name__ == '__main__':

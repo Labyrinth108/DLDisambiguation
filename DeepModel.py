@@ -3,7 +3,7 @@
 
 import tensorflow as tf
 
-
+# no use any more...*********************************** Change to MultiGran_Model.py
 class CNNModel(object):
 
     def __init__(self, max_len, filter_sizes, num_filters, l2_reg_lambda=0.0):

@@ -2,40 +2,37 @@
 # coding=utf-8
 import gensim, jieba, os
 from scipy import spatial
-from DLDisambiguation.util.util import preprocess_arr
+from util.util import preprocess_arr
 import numpy as np
 import tensorflow as tf
 
-from DLDisambiguation.util.input_helpers import InputHelper
+from util.input_helpers import InputHelper
 from util.preprocess import MyVocabularyProcessor
-from DLDisambiguation.util.util import loadIDFModel
+from util.util import loadIDFModel
 
 
 class Tensor(object):
-    def __init__(self, m, e, batch_size, sequence_length, task_num):
+    def __init__(self, m, e, batch_size, sequence_length, task_num, lstm_dir):
         """
         initialize tensors
         :param m: mention list
         :param e: entity list
         :param batch_size: batch_size
         :param sequence_length: default sentence length
+        :param task_num: the type of task(1--description, 2--operation)
         """
         channel_num = 4
         if task_num == 1:  # task1-description disambiguation
             word2vec_dir = "./data/word2vec"
-            timestamp = "1500219958"
             self.idfModel_file = "./data/idfModel.txt"
 
         else:  # task2-operation disambiguation
             word2vec_dir = "./data/operation"
-            timestamp = "1500598538"
             self.idfModel_file = "./data/idfModel_operation.txt"
 
         character_model_file = os.path.join(word2vec_dir, 'character.model')
         word_mode_file = os.path.join(word2vec_dir, 'word.model')
-
-        dir = "/Users/luoyi/Documents/Python/DLDisambiguation"
-        self.bilstm_dir = os.path.abspath(os.path.join(dir, "Sentence_Modeling/runs", timestamp))
+        self.bilstm_dir = lstm_dir
 
         self.mentions = preprocess_arr(m)
         self.entities = preprocess_arr(e)
@@ -46,56 +43,22 @@ class Tensor(object):
         self.word_embedding_model = gensim.models.Word2Vec.load(word_mode_file)
 
         self.tensor = np.zeros(shape=(batch_size, channel_num, sequence_length, sequence_length))
+        self.init_matrices()
 
-        self.init_str_matrix()
-        self.init_character_matrix()
-        self.init_word_matrix()
-        self.init_sentence_matrix()
-
-    def init_str_matrix(self):
+    def init_matrices(self):
         """
-        initialize the str-match matrix
+        initialize four matrices in the tensor
         :return:
         """
-        for sample_index in range(self.batch_size):
-            len_mention = len(self.mentions[sample_index].decode("utf-8"))
-            len_entity = len(self.entities[sample_index].decode("utf-8"))
-
-            for i in range(len_mention):
-                for j in range(len_entity):
-
-                    if self.mentions[sample_index][i] == self.entities[sample_index][j]:
-                        self.tensor[sample_index][0][i][j] = 1
-        print "Str matrix ok"
-
-    def init_character_matrix(self):
-        """
-        initialize the character-match matrix
-        :return:
-        """
+        sentence_embedding_m, sentence_embedding_e = self.getSentence_Embedding(self.mentions, self.entities,
+                                                                                self.sequence_length)
+        print("Sentence Embedding Finished!")
 
         for sample_index in range(self.batch_size):
             len_mention = len(self.mentions[sample_index].decode("utf-8"))
             len_entity = len(self.entities[sample_index].decode("utf-8"))
 
-            for i in range(len_mention):
-                for j in range(len_entity):
-                    character_embedding_mi = self.get_embedding(self.mentions[sample_index][i],
-                                                                self.character_embedding_model)
-                    character_embedding_ei = self.get_embedding(self.entities[sample_index][j],
-                                                                self.character_embedding_model)
-                    self.tensor[sample_index][1][i][j] = 1 - spatial.distance.cosine(character_embedding_ei,
-                                                                                     character_embedding_mi)
-        print "Character matrix ok"
-
-    def init_word_matrix(self):
-        """
-        initialize the word-match matrix
-        :return:
-        """
-
-        for sample_index in range(self.batch_size):
-
+            # for word matching
             words_m = list(jieba.cut(self.mentions[sample_index]))
             words_e = list(jieba.cut(self.entities[sample_index]))
             len_w_m = len(words_m)
@@ -114,25 +77,28 @@ class Tensor(object):
                             self.tensor[sample_index][2][
                                 self.mentions[sample_index].index(character_i), self.entities[sample_index].index(
                                     character_j)] = words_sim
-        print "Word matrix ok"
 
-    def init_sentence_matrix(self):
-        """
-        initialize the sentence_level-match matrix
-        :return:
-        """
-        sentence_embedding_m, sentence_embedding_e = self.getSentence_Embedding(self.mentions, self.entities)
-
-        for sample_index in range(self.batch_size):
-            for i in range(self.sequence_length):
-                for j in range(self.sequence_length):
+            for i in range(len_mention):
+                for j in range(len_entity):
+                    # for sentence matching
                     self.tensor[sample_index][3][i][j] = 1 - spatial.distance.cosine(
                         sentence_embedding_m[sample_index][i], sentence_embedding_e[sample_index][j])
 
-        print "Sentence matrix ok"
+                    # for string matching
+                    if self.mentions[sample_index][i] == self.entities[sample_index][j]:
+                        self.tensor[sample_index][0][i][j] = 1
+
+                    # for character matching
+                    character_embedding_mi = self.get_embedding(self.mentions[sample_index][i],
+                                                                self.character_embedding_model)
+                    character_embedding_ei = self.get_embedding(self.entities[sample_index][j],
+                                                                self.character_embedding_model)
+                    self.tensor[sample_index][1][i][j] = 1 - spatial.distance.cosine(character_embedding_ei,
+                                                                                     character_embedding_mi)
+
+        print("Tensor Completed!")
 
     def get_tensor(self):
-        print "Tensor Completed!"
         return self.tensor
 
     def get_embedding(self, word, model):
@@ -173,7 +139,7 @@ class Tensor(object):
             res.append(weight_per_name)
             res_arr = np.asarray(res)
 
-            # normalize the idf weights
+            # *** normalize the idf weights
             row_sums = res_arr.sum(axis=1)
             res_arr = res_arr / row_sums[:, np.newaxis]
         return res_arr
@@ -188,8 +154,18 @@ class Tensor(object):
         representation = representation * weights[:, :, np.newaxis]
         return representation
 
-    def getSentence_Embedding(self, x1, x2):
-        max_document_length = 20
+    def getAttention_M(self, r, m, x, index, vocab_id_w, idfModel):
+        # r(input_size, None, hidden_n * 2) => (None, input_size, hidden_n * 2)
+        representation = np.transpose(r, (1, 0, 2))
+        representation = representation * m[:, :, np.newaxis]
+
+        weights = self.getIDFWeights(x, index, vocab_id_w, idfModel)  # shape: batch_size * sequence_length
+
+        # weights transform from 2D to 3 D and then 3D*3D broadcasting
+        representation = representation * weights[:, :, np.newaxis]
+        return representation
+
+    def getSentence_Embedding(self, x1, x2, max_document_length):
 
         checkpoint_dir = os.path.abspath(os.path.join(self.bilstm_dir, "checkpoints"))
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
@@ -198,13 +174,19 @@ class Tensor(object):
         vocab_file = os.path.join(checkpoint_dir, "vocab")
 
         inpH = InputHelper()
-        x1_index, x2_index = inpH.toVocabularyIndexVector(x1, x2, vocab_file, max_document_length)
+        vocab_processor = MyVocabularyProcessor(max_document_length, min_frequency=0)
+        vocab_processor = vocab_processor.restore(vocab_file)
+
+        tmp = []
+        (x1_index, x2_index, mask_x1, mask_x2, tmp) = inpH.get_data(vocab_processor, x1, x2, tmp,
+                                                                    max_document_length)
+        # x1_index, x2_index = inpH.toVocabularyIndexVector(x1, x2, vocab_file, max_document_length)
 
         idfModel = loadIDFModel(self.idfModel_file)
 
-        # load vocabulary model
-        vocab_processor = MyVocabularyProcessor(max_document_length, min_frequency=0)
-        vocab_processor = vocab_processor.restore(vocab_file)
+        # # load vocabulary model
+        # vocab_processor = MyVocabularyProcessor(max_document_length, min_frequency=0)
+        # vocab_processor = vocab_processor.restore(vocab_file)
 
         # Extract word:id mapping from the object.
         vocab_dict = vocab_processor.vocabulary_._mapping
@@ -236,7 +218,7 @@ class Tensor(object):
                                   {input_x1: x1_index, input_x2: x2_index})
 
                 # Applied Attention_mechanism
-                representation1 = self.getAttention(r1, x1, x1_index, vocab_id_w, idfModel)
-                representation2 = self.getAttention(r2, x2, x2_index, vocab_id_w, idfModel)
+                representation1 = self.getAttention_M(r1, mask_x1, x1, x1_index, vocab_id_w, idfModel)
+                representation2 = self.getAttention_M(r2, mask_x2, x2, x2_index, vocab_id_w, idfModel)
 
         return representation1, representation2
