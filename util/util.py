@@ -4,13 +4,16 @@ import re
 import numpy as np
 
 
-def write_evaluation_file(eval_file, right_output_file, wrong_output_file, labels, predictions, mentions, entities):
+def write_evaluation_file(eval_file, right_output_file, wrong_output_file, labels, predictions, mentions, entities,
+                          indi=None):
     tp, fp, tn, fn = 0, 0, 0, 0
     length = len(predictions)
     right_output_file.write("mention\tentity\tprediction\tlabel\n")
     wrong_output_file.write("mention\tentity\tprediction\tlabel\n")
 
     for i in range(length):
+        if indi != None and indi[i] == 0:
+            continue
         str_m = mentions[i] + "\t" + entities[i] + "\t" + str(predictions[i]) + "\t" + str(labels[i]) + "\n"
         if predictions[i] == 1 and labels[i] == 1:
             tp += 1.0
@@ -31,7 +34,7 @@ def write_evaluation_file(eval_file, right_output_file, wrong_output_file, label
     eval_file.write("False negative: " + str(fn) + "\n")
 
     precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
+    recall = tp / (tp + fn) if tp + fn != 0.0 else 0.0001
     f1 = 2 * precision * recall / (recall + precision)
 
     eval_file.write("Precision:" + str(precision) + "\n")

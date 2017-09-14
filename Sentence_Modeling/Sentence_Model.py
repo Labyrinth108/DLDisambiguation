@@ -8,18 +8,19 @@ import numpy as np
 import datetime
 import os
 
+from DLDisambiguation.util.util import write_evaluation_file
+
 # Parameters
 # ==================================================
 tf.flags.DEFINE_integer("embedding_dim", 100, "Dimensionality of character embedding")
 tf.flags.DEFINE_integer("hidden_units", 15, "unit numbers of hidden vectors in Bi-LSTM")
-tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularization lambda (default: 0.0)")
+tf.flags.DEFINE_float("l2_reg_lambda", 0.01, "L2 regularization lambda (default: 0.0)")
 
-# tf.flags.DEFINE_string("training_files", "../data/923data.txt", "training file (default: None)")
 tf.flags.DEFINE_string("train_dir", "../", "training dir")
 
 # Training parameters
 tf.flags.DEFINE_integer("batch_size", 128, "Batch Size")
-tf.flags.DEFINE_integer("num_epochs", 5, "Number of training epochs (default: 50)")
+tf.flags.DEFINE_integer("num_epochs", 50, "Number of training epochs (default: 50)")
 tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model on dev set after this many steps")
 tf.flags.DEFINE_integer("checkpoint_every", 100, "Save model after this many steps (default: 100)")
 
@@ -32,7 +33,6 @@ print("")
 
 
 class SentenceModel:
-
     def getEmbeddingMatrix(self, embedding_dir, processer):
         vocab, vocab_size, embedding_dim, embedding = getEmbedding(embedding_dir)
 
@@ -62,7 +62,7 @@ class SentenceModel:
 
     def __init__(self):
         # the max length of description/operation segment, padding if shorter, and ignore the pair if longer
-        max_document_length = 10
+        max_document_length = 20
         inpH = InputHelper()
         y_is_value = True  # flag to indicate that y is value(0 / 1) or array[0,1] / [1, 0]
         # train_set, dev_set, vocab_processor, sum_no_of_batches = inpH.getDataSets_File(FLAGS.training_files, "\t",
@@ -78,15 +78,16 @@ class SentenceModel:
             else "../data/operation/character_model.txt"
         name = "des" if task_num == 1 else "opr"
 
-        data_file = os.path.join(FLAGS.train_dir, "data/training_data_0724_" + name + ".txt")
-        data_file_test = os.path.join(FLAGS.train_dir, "data/test_data_0724_" + name + ".txt")
-        data_file_val = os.path.join(FLAGS.train_dir, "data/validation_data_0724_" + name + ".txt")
+        time_gen = "0823"
+        data_file = os.path.join(FLAGS.train_dir, "data/train_data_" + time_gen + "_" + name + ".txt")
+        data_file_test = os.path.join(FLAGS.train_dir, "data/test_data_" + time_gen + "_" + name + ".txt")
+        # data_file_val = os.path.join(FLAGS.train_dir, "data/validation_data_" + time_gen + "_" + name + ".txt")
 
         sep = "\t"
         train_x1, train_x2, train_y = inpH.getTsvTestData(data_file, sep, max_document_length, y_is_value)
         test_x1, test_x2, test_y = inpH.getTsvTestData(data_file_test, sep, max_document_length, y_is_value)
-        dev_x1, dev_x2, dev_y = inpH.getTsvTestData(data_file_val, sep, max_document_length, y_is_value)
-
+        # dev_x1, dev_x2, dev_y = inpH.getTsvTestData(data_file_val, sep, max_document_length, y_is_value)
+        dev_x1, dev_x2, dev_y = test_x1, test_x2, test_y
         sum_no_of_batches = len(train_y) // FLAGS.batch_size
 
         vocab_processor = MyVocabularyProcessor(max_document_length, min_frequency=0)
@@ -116,170 +117,213 @@ class SentenceModel:
             optimizer = tf.train.AdamOptimizer(1e-3)
             print("initialized siameseModel object")
 
-        grads_and_vars = optimizer.compute_gradients(siameseModel.loss)
-        tr_op_set = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
-        print("defined training_ops")
+            grads_and_vars = optimizer.compute_gradients(siameseModel.loss)
+            tr_op_set = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
+            print("defined training_ops")
 
-        # Keep track of variables, gradient values and sparsity
-        for g, v in grads_and_vars:
-            if g is not None:
-                tf.summary.histogram("grad_hist/{}".format(v.name), g)
-                tf.summary.histogram("grad_sparsity/{}".format(v.name), tf.nn.zero_fraction(g))
-                tf.summary.histogram(v.name, v)
-        print("defined gradient summaries")
+            # Keep track of variables, gradient values and sparsity
+            for g, v in grads_and_vars:
+                if g is not None:
+                    tf.summary.histogram("grad_hist/{}".format(v.name), g)
+                    tf.summary.histogram("grad_sparsity/{}".format(v.name), tf.nn.zero_fraction(g))
+                    tf.summary.histogram(v.name, v)
+            print("defined gradient summaries")
 
-        # Output directory for models and summaries
-        timestamp = str(int(time.time()))
-        out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", d_type + timestamp))
-        print("Writing to {}\n".format(out_dir))
+            # Output directory for models and summaries
+            timestamp = str(int(time.time()))
+            out_dir = os.path.abspath(os.path.join(os.path.curdir, "Exp" + time_gen, "runs", d_type + timestamp))
+            print("Writing to {}\n".format(out_dir))
 
-        # Summaries for loss and accuracy
-        loss_summary = tf.summary.scalar("loss", siameseModel.loss)
-        acc_summary = tf.summary.scalar("accuracy", siameseModel.accuracy)
+            # Summaries for loss and accuracy
+            loss_summary = tf.summary.scalar("loss", siameseModel.loss)
+            acc_summary = tf.summary.scalar("accuracy", siameseModel.accuracy)
 
-        # Train Summaries
-        train_summary_merged = tf.summary.merge_all()
-        train_summary_dir = os.path.join(out_dir, "summaries", "train")
-        train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)
+            # Train Summaries
+            train_summary_merged = tf.summary.merge_all()
+            train_summary_dir = os.path.join(out_dir, "summaries", "train")
+            train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)
 
-        # Dev summaries
-        dev_summary_op = tf.summary.merge([loss_summary, acc_summary])
-        dev_summary_dir = os.path.join(out_dir, "summaries", "dev")
-        dev_summary_writer = tf.summary.FileWriter(dev_summary_dir, sess.graph)
+            # Dev summaries
+            dev_summary_op = tf.summary.merge([loss_summary, acc_summary])
+            dev_summary_dir = os.path.join(out_dir, "summaries", "dev")
+            dev_summary_writer = tf.summary.FileWriter(dev_summary_dir, sess.graph)
 
-        # Checkpoint directory. Tensorflow assumes this directory already exists so we need to create it
-        checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
-        checkpoint_prefix = os.path.join(checkpoint_dir, "model")
-        if not os.path.exists(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
-        saver = tf.train.Saver(tf.all_variables(), max_to_keep=100)
+            # Checkpoint directory. Tensorflow assumes this directory already exists so we need to create it
+            checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
+            checkpoint_prefix = os.path.join(checkpoint_dir, "model")
+            if not os.path.exists(checkpoint_dir):
+                os.makedirs(checkpoint_dir)
+            saver = tf.train.Saver(tf.all_variables(), max_to_keep=100)
 
-        # Write vocabulary
-        vocab_processor.save(os.path.join(checkpoint_dir, "vocab"))
+            # Write vocabulary
+            vocab_processor.save(os.path.join(checkpoint_dir, "vocab"))
 
-        # Initialize all variables
-        sess.run(tf.initialize_all_variables())
-        print("init all variables")
+            # Initialize all variables
+            sess.run(tf.initialize_all_variables())
+            print("init all variables")
 
-        graph_def = tf.get_default_graph().as_graph_def()
-        graphpb_txt = str(graph_def)
-        with open(os.path.join(checkpoint_dir, "graphpb.txt"), 'w') as f:
-            f.write(graphpb_txt)
+            graph_def = tf.get_default_graph().as_graph_def()
+            graphpb_txt = str(graph_def)
+            with open(os.path.join(checkpoint_dir, "graphpb.txt"), 'w') as f:
+                f.write(graphpb_txt)
 
-        def train_step(x1_batch, x2_batch, x1_batch_m, x2_batch_m, y_batch):
+            def train_step(x1_batch, x2_batch, x1_batch_m, x2_batch_m, y_batch):
 
-            feed_dict = {
-                siameseModel.input_x1: x1_batch,
-                siameseModel.input_x2: x2_batch,
-                siameseModel.mask_x1: x1_batch_m,
-                siameseModel.mask_x2: x2_batch_m,
-                siameseModel.input_y: y_batch,
-            }
+                feed_dict = {
+                    siameseModel.input_x1: x1_batch,
+                    siameseModel.input_x2: x2_batch,
+                    siameseModel.mask_x1: x1_batch_m,
+                    siameseModel.mask_x2: x2_batch_m,
+                    siameseModel.input_y: y_batch,
+                }
 
-            _, step, summaries, loss, accuracy, dist = sess.run(
-                [tr_op_set, global_step, train_summary_merged, siameseModel.loss, siameseModel.accuracy,
-                 siameseModel.distance], feed_dict)
+                _, step, summaries, loss, accuracy, dist = sess.run(
+                    [tr_op_set, global_step, train_summary_merged, siameseModel.loss, siameseModel.accuracy,
+                     siameseModel.distance], feed_dict)
 
-            time_str = datetime.datetime.now().isoformat()
-            d = np.copy(dist)
-            d[d >= 0.5] = 999.0
-            d[d < 0.5] = 1
-            d[d > 1.0] = 0
-            # accuracy = np.mean(y_batch == d)
-            accuracy_t = np.mean(y_batch == d)
-            print(
-                "TRAIN {}: step {}, loss {:g}, acc {:g}, acc_t {:g}".format(time_str, step, loss, accuracy, accuracy_t))
-            print(y_batch)
-            print(dist)
-            print(d)
-            train_summary_writer.add_summary(summaries, step)
+                time_str = datetime.datetime.now().isoformat()
+                d = np.copy(dist)
+                d[d >= 0.5] = 999.0
+                d[d < 0.5] = 1
+                d[d > 1.0] = 0
+                accuracy_t = np.mean(y_batch == d)
+                print(
+                    "TRAIN {}: step {}, loss {:g}, acc {:g}, acc_t {:g}".format(time_str, step, loss, accuracy, accuracy_t))
+                print(y_batch)
+                print(dist)
+                print(d)
+                train_summary_writer.add_summary(summaries, step)
 
-        def dev_step(x1_batch, x2_batch, x1_batch_m, x2_batch_m, y_batch):
+            def dev_step(x1_batch, x2_batch, x1_batch_m, x2_batch_m, y_batch):
 
-            feed_dict = {
-                siameseModel.input_x1: x1_batch,
-                siameseModel.input_x2: x2_batch,
-                siameseModel.mask_x1: x1_batch_m,
-                siameseModel.mask_x2: x2_batch_m,
-                siameseModel.input_y: y_batch,
-            }
+                feed_dict = {
+                    siameseModel.input_x1: x1_batch,
+                    siameseModel.input_x2: x2_batch,
+                    siameseModel.mask_x1: x1_batch_m,
+                    siameseModel.mask_x2: x2_batch_m,
+                    siameseModel.input_y: y_batch,
+                }
 
-            step, summaries, loss, accuracy, dist = sess.run(
-                [global_step, dev_summary_op, siameseModel.loss, siameseModel.accuracy, siameseModel.distance],
-                feed_dict)
-            time_str = datetime.datetime.now().isoformat()
-            d = np.copy(dist)
-            d[d >= 0.5] = 999.0
-            d[d < 0.5] = 1
-            d[d > 1.0] = 0
-            accuracy_t = np.mean(y_batch == d)
-            # accuracy = np.mean(y_batch == d)
-            print("DEV {}: step {}, loss {:g}, acc {:g}, acc_t {:g}".format(time_str, step, loss, accuracy, accuracy_t))
-            print(y_batch)
-            print(dist)
-            print(d)
-            dev_summary_writer.add_summary(summaries, step)
-            return accuracy
+                step, summaries, loss, accuracy, dist = sess.run(
+                    [global_step, dev_summary_op, siameseModel.loss, siameseModel.accuracy, siameseModel.distance],
+                    feed_dict)
+                time_str = datetime.datetime.now().isoformat()
+                d = np.copy(dist)
+                d[d >= 0.5] = 999.0
+                d[d < 0.5] = 1
+                d[d > 1.0] = 0
+                accuracy_t = np.mean(y_batch == d)
+                print("DEV {}: step {}, loss {:g}, acc {:g}, acc_t {:g}".format(time_str, step, loss, accuracy, accuracy_t))
+                print(y_batch)
+                print(dist)
+                print(d)
+                dev_summary_writer.add_summary(summaries, step)
+                return accuracy
 
-        def evaluate(x1_batch, x2_batch, x1_batch_m, x2_batch_m, y_batch):
+            def overfit(dev_loss, accu):
+                num = 6
+                n = len(dev_loss)
+                if n < num:
+                    return False
+                for i in xrange(n - num, n):
+                    if dev_loss[i] < accu:
+                        return False
+                print(dev_loss)
+                print(accu)
+                return True
 
-            feed_dict = {
-                siameseModel.input_x1: x1_batch,
-                siameseModel.input_x2: x2_batch,
-                siameseModel.mask_x1: x1_batch_m,
-                siameseModel.mask_x2: x2_batch_m,
-                siameseModel.input_y: y_batch,
-            }
+            def evaluate(x1_batch, x2_batch, x1_batch_m, x2_batch_m, y_batch, mention, entity):
 
-            loss, accuracy, dist = sess.run([siameseModel.loss, siameseModel.accuracy, siameseModel.distance],
-                                            feed_dict)
-            time_str = datetime.datetime.now().isoformat()
-            print("Test {}: loss {:g}, acc {:g}".format(time_str, loss, accuracy))
-            print(dist)
-            return accuracy
+                feed_dict = {
+                    siameseModel.input_x1: x1_batch,
+                    siameseModel.input_x2: x2_batch,
+                    siameseModel.mask_x1: x1_batch_m,
+                    siameseModel.mask_x2: x2_batch_m,
+                    siameseModel.input_y: y_batch,
+                }
 
-        # Generate batches
-        batches = inpH.batch_iter(list(zip(train_set[0], train_set[1], train_set[2], train_set[3], train_set[4])),
-                                  FLAGS.batch_size, FLAGS.num_epochs)
+                loss, accuracy, dist = sess.run([siameseModel.loss, siameseModel.accuracy, siameseModel.distance],
+                                                feed_dict)
+                time_str = datetime.datetime.now().isoformat()
+                print("Test {}: loss {:g}, acc {:g}".format(time_str, loss, accuracy))
+                print(dist)
 
-        max_validation_acc = 0.0
-        for nn in xrange(sum_no_of_batches * FLAGS.num_epochs):
-            batch = batches.next()
-            if len(batch) < 1:
-                continue
-            x1_batch, x2_batch, x1_batch_m, x2_match_m, y_batch = zip(*batch)
-            if len(y_batch) < 1:
-                continue
+                eval_file = open(out_dir + "/evaluation.txt", "w+")
+                right_file = open(out_dir + "/right_cases.txt", "w+")
+                wrong_file = open(out_dir + "/wrong_cases.txt", "w+")
 
-            train_step(x1_batch, x2_batch, x1_batch_m, x2_match_m, y_batch)
+                eval_file.write("Accu: " + str(accuracy) + "\n")
+                eval_file.write("Dataset: " + data_file + "\n")
+                eval_file.write("Early Stopped at: " + str(stop_p) + "\n")
 
-            current_step = tf.train.global_step(sess, global_step)  # get the global step.
-            sum_acc = 0.0
+                d = np.copy(dist)
+                d[d >= 0.5] = 999.0
+                d[d < 0.5] = 1
+                d[d > 1.0] = 0
 
-            if current_step % FLAGS.evaluate_every == 0:
-                print("\nEvaluation:")
-                dev_batches = inpH.batch_iter(list(zip(dev_set[0], dev_set[1], dev_set[2], dev_set[3], dev_set[4])),
-                                              FLAGS.batch_size, 1)
-                for db in dev_batches:
-                    if len(db) < 1:
-                        continue
-                    x1_dev_b, x2_dev_b, x1_dev_m, x2_dev_m, y_dev_b = zip(*db)
-                    if len(y_dev_b) < 1:
-                        continue
-                    acc = dev_step(x1_dev_b, x2_dev_b, x1_dev_m, x2_dev_m, y_dev_b)
-                    sum_acc = sum_acc + acc
-                    print("")
+                predictions = d
+                write_evaluation_file(eval_file, right_file, wrong_file, y_batch, predictions, mention, entity)
+                return accuracy
 
-            if current_step % FLAGS.checkpoint_every == 0:
-                if sum_acc >= max_validation_acc:
-                    max_validation_acc = sum_acc
-                    saver.save(sess, checkpoint_prefix, global_step=current_step)  # save checkpoints
-                    tf.train.write_graph(sess.graph.as_graph_def(), checkpoint_prefix, "graph" + str(nn) + ".pb",
-                                         as_text=False)  # save graph_def
-                    print("Saved model {} with sum_accuracy={} checkpoint to {}\n".format(nn, max_validation_acc,
-                                                                                          checkpoint_prefix))
+            # Generate batches
+            batches = inpH.batch_iter(list(zip(train_set[0], train_set[1], train_set[2], train_set[3], train_set[4])),
+                                      FLAGS.batch_size, FLAGS.num_epochs)
 
-        evaluate(test_set[0], test_set[1], test_set[2], test_set[3], test_set[4])
+            max_validation_acc = 0.0
+            num_batches_per_epoch = int(len(train_set[0]) / FLAGS.batch_size)
+            print num_batches_per_epoch
+            max_accu = 0
+            dev_accu = []
+
+            for nn in xrange(sum_no_of_batches * FLAGS.num_epochs):
+                batch = batches.next()
+                if len(batch) < 1:
+                    continue
+                x1_batch, x2_batch, x1_batch_m, x2_match_m, y_batch = zip(*batch)
+                if len(y_batch) < 1:
+                    continue
+
+                train_step(x1_batch, x2_batch, x1_batch_m, x2_match_m, y_batch)
+
+                current_step = tf.train.global_step(sess, global_step)  # get the global step.
+                sum_acc = 0.0
+                tmp = []
+
+                if current_step % num_batches_per_epoch == 0:
+                    print("\nEvaluation:")
+                    # dev_batches = inpH.batch_iter(list(zip(dev_set[0], dev_set[1], dev_set[2], dev_set[3], dev_set[4])),
+                    #                               FLAGS.batch_size, 1)
+                    # for db in dev_batches:
+                    #     if len(db) < 1:
+                    #         continue
+                    #     x1_dev_b, x2_dev_b, x1_dev_m, x2_dev_m, y_dev_b = zip(*db)
+                    #     if len(y_dev_b) < 1:
+                    #         continue
+                    #     acc = dev_step(x1_dev_b, x2_dev_b, x1_dev_m, x2_dev_m, y_dev_b)
+                    #     sum_acc = sum_acc + acc
+                    #     tmp.append(acc)
+                    #
+                    # acc_mean = np.mean(tmp)
+                    acc_mean = dev_step(dev_set[0], dev_set[1], dev_set[2], dev_set[3], dev_set[4])
+                    dev_accu.append(acc_mean)
+
+                    if overfit(dev_accu, acc_mean):
+                        print 'Overfit!!'
+                        print("Optimum" + str(max_accu))
+                        print(current_step)
+                        stop_p = current_step / num_batches_per_epoch
+                        print(stop_p)
+                        break
+
+                    if acc_mean >= max_accu:
+                        max_accu = acc_mean
+                        saver.save(sess, checkpoint_prefix, global_step=current_step)  # save checkpoints
+                        tf.train.write_graph(sess.graph.as_graph_def(), checkpoint_prefix, "graph" + str(nn) + ".pb",
+                                             as_text=False)  # save graph_def
+                        print("Saved model {} with sum_accuracy={} checkpoint to {}\n".format(nn, max_validation_acc,
+                                                                                              checkpoint_prefix))
+
+            evaluate(test_set[0], test_set[1], test_set[2], test_set[3], test_set[4], test_x1, test_x2)
 
 
 s = SentenceModel()

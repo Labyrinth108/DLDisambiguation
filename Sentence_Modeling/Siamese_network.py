@@ -1,6 +1,4 @@
 import tensorflow as tf
-import numpy as np
-
 
 class SiameseLSTM(object):
     """
@@ -22,7 +20,7 @@ class SiameseLSTM(object):
         self.vocab_processer = vocab_processer
 
         # Keeping track of l2 regularization loss (optional)
-        # l2_loss = tf.constant(0.0, name="l2_loss")
+        l2_loss = tf.constant(0.0, name="l2_loss")
 
         # Embedding layer
         with tf.name_scope("embedding"):
@@ -44,13 +42,14 @@ class SiameseLSTM(object):
             self.out1 = self.BiRNN(self.embedded_chars1, self.mask_x1, "side1", embedding_size, sequence_length)
             self.out2 = self.BiRNN(self.embedded_chars2, self.mask_x2, "side2", embedding_size, sequence_length)
 
-            # # # cosine distance
+            # cosine distance
             # normalize_a = tf.nn.l2_normalize(self.out1, 1)
             # normalize_b = tf.nn.l2_normalize(self.out2, 1)
             # self.distance = tf.subtract(1.0, abs(
             #     tf.reduce_sum(tf.multiply(normalize_a, normalize_b), axis=1, name="distance")))
 
             # Euclidean distance : distance shape:(None)
+
             self.distance = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(self.out1, self.out2)), 1))
 
         with tf.name_scope("sentence_embedding"):
@@ -63,17 +62,18 @@ class SiameseLSTM(object):
             self.representation2 = tf.identity(self.representation2, name="Representation2")
 
         with tf.name_scope("loss"):
+
             self.loss = self.contrastive_loss(self.input_y, self.distance, batch_size)
 
         with tf.name_scope("accuracy"):
             # predict_label = tf.subtract(1.0, tf.round(self.distance))
 
             margin = 0.5
-            self.predict_label = tf.cast(tf.less(self.distance, margin), "float", name="prediction")
+            self.predict_label = tf.cast(tf.less(self.distance, margin), "float32", name="prediction")
             # predict_label = tf.subtract(tf.Variable(1.0), tf.round(self.distance))
 
             correct_predictions = tf.equal(self.predict_label, self.input_y)
-            self.accuracy = tf.reduce_mean(tf.cast(correct_predictions, "float"), name="accuracy")
+            self.accuracy = tf.reduce_mean(tf.cast(correct_predictions, "float32"), name="accuracy")
 
     def BiRNN(self, x, mask, scope, embedding_size, sequence_length, reuse_f=None):
         n_input = embedding_size
@@ -96,7 +96,6 @@ class SiameseLSTM(object):
         with tf.name_scope("fwbw" + scope), tf.variable_scope("fwbw" + scope, reuse=reuse_f):
             outputs, _, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn(fw_cell, bw_cell, x, dtype=tf.float32)
 
-
         outputs = tf.stack(outputs)  # list of Tensor(None*(2*hidden)) => steps * None * (2*hidden)
 
         outputs = tf.transpose(outputs, [1, 0, 2])  # steps * None * (2*hidden) => None * steps * (2 * hidden)
@@ -105,7 +104,8 @@ class SiameseLSTM(object):
         # Use mask
         outputs = outputs * mask[:, :, None]
         # mean pooling to get the vector
-        outputs = tf.reduce_sum(outputs, 1) / (tf.reduce_sum(mask, 1)[:, None])
+        x = tf.reduce_sum(mask, 1)[:, None]
+        outputs = tf.reduce_sum(outputs, 1) / x
         print(outputs.get_shape().as_list())
         return outputs
 
@@ -133,7 +133,8 @@ class SiameseLSTM(object):
 
     def contrastive_loss(self, y, d, batch_size):
         tmp = y * tf.square(d)
-        tmp2 = (1 - y) * tf.square(tf.maximum((1 - d), 0))
+        margin = 1
+        tmp2 = (1 - y) * tf.square(tf.maximum((margin - d), 0))
         return tf.reduce_sum(tmp + tmp2) / batch_size / 2
 
         # dis = tf.subtract(tf.Variable(1.0), d)

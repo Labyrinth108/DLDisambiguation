@@ -4,14 +4,14 @@ import tensorflow as tf
 import os
 
 # tf.flags.DEFINE_string("test_file", "../data/validation_data_0724_opr.txt", "training file (default: None)")
-tf.flags.DEFINE_string("test_file", "../data/test_data_0724_des.txt", "training file (default: None)")
+tf.flags.DEFINE_string("test_file", "../data/test_data_0816_des.txt", "training file (default: None)")
 
 FLAGS = tf.flags.FLAGS
 inpH = InputHelper()
-max_document_length = 20
+max_document_length = 10
 y_is_value = True
 
-model_dir = "./runs/Description1501174251"
+model_dir = "./Exp/runs/Description1502955472"
 # model_dir = "./runs/Description1500991322"  # 0.760
 # model_dir = "./runs/1500428748" # 0.69
 # model_dir = "./runs/Description1500983617"  # 0.767

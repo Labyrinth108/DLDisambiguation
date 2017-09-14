@@ -24,11 +24,13 @@ class Tensor(object):
         channel_num = 4
         if task_num == 1:  # task1-description disambiguation
             word2vec_dir = "./data/word2vec"
-            self.idfModel_file = "./data/idfModel.txt"
+            self.idfModel_file = "./data/description_idf.txt"
+            # self.idfModel_file = "./data/idfModel.txt"
 
         else:  # task2-operation disambiguation
             word2vec_dir = "./data/operation"
-            self.idfModel_file = "./data/idfModel_operation.txt"
+            self.idfModel_file = "./data/operation_idf.txt"
+            # self.idfModel_file = "./data/idfModel_operation.txt"
 
         character_model_file = os.path.join(word2vec_dir, 'character.model')
         word_mode_file = os.path.join(word2vec_dir, 'word.model')
@@ -52,6 +54,11 @@ class Tensor(object):
         """
         sentence_embedding_m, sentence_embedding_e = self.getSentence_Embedding(self.mentions, self.entities,
                                                                                 self.sequence_length)
+        np.save("no_att_sentece_m_opr.npy", sentence_embedding_m)
+        np.save("no_att_sentece_e_opr.npy", sentence_embedding_e)
+        # sentence_embedding_m = np.load("0823_sentence_m.npy")
+        # sentence_embedding_e = np.load("0823_sentence_e.npy")
+
         print("Sentence Embedding Finished!")
 
         for sample_index in range(self.batch_size):
@@ -101,6 +108,7 @@ class Tensor(object):
     def get_tensor(self):
         return self.tensor
 
+
     def get_embedding(self, word, model):
         if word in model.wv.vocab.keys():
             index = model.wv.index2word.index(word)
@@ -109,6 +117,7 @@ class Tensor(object):
         else:
             vector_length = 100
             return np.ones([vector_length])
+
 
     def getIDFWeights(self, x_names, x_index, vocab_id_w, idfModel):
         res = []  # idf_weights
@@ -144,6 +153,7 @@ class Tensor(object):
             res_arr = res_arr / row_sums[:, np.newaxis]
         return res_arr
 
+
     def getAttention(self, r, x, index, vocab_id_w, idfModel):
         # r(input_size, None, hidden_n * 2) => (None, input_size, hidden_n * 2)
         representation = np.transpose(r, (1, 0, 2))
@@ -153,6 +163,7 @@ class Tensor(object):
         # weights transform from 2D to 3 D and then 3D*3D broadcasting
         representation = representation * weights[:, :, np.newaxis]
         return representation
+
 
     def getAttention_M(self, r, m, x, index, vocab_id_w, idfModel):
         # r(input_size, None, hidden_n * 2) => (None, input_size, hidden_n * 2)
@@ -164,9 +175,18 @@ class Tensor(object):
         # weights transform from 2D to 3 D and then 3D*3D broadcasting
         representation = representation * weights[:, :, np.newaxis]
         return representation
+    def no_attention(self, r, m, x, index, vocab_id_w, idfModel):
+        # r(input_size, None, hidden_n * 2) => (None, input_size, hidden_n * 2)
+        representation = np.transpose(r, (1, 0, 2))
+        representation = representation * m[:, :, np.newaxis]
+
+        # weights = self.getIDFWeights(x, index, vocab_id_w, idfModel)  # shape: batch_size * sequence_length
+
+        # weights transform from 2D to 3 D and then 3D*3D broadcasting
+        # representation = representation * weights[:, :, np.newaxis]
+        return representation
 
     def getSentence_Embedding(self, x1, x2, max_document_length):
-
         checkpoint_dir = os.path.abspath(os.path.join(self.bilstm_dir, "checkpoints"))
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
         checkpoint_file = ckpt.model_checkpoint_path
@@ -220,5 +240,7 @@ class Tensor(object):
                 # Applied Attention_mechanism
                 representation1 = self.getAttention_M(r1, mask_x1, x1, x1_index, vocab_id_w, idfModel)
                 representation2 = self.getAttention_M(r2, mask_x2, x2, x2_index, vocab_id_w, idfModel)
+                # representation1 = self.no_attention(r1, mask_x1, x1, x1_index, vocab_id_w, idfModel)
+                # representation2 = self.no_attention(r2, mask_x2, x2, x2_index, vocab_id_w, idfModel)
 
         return representation1, representation2

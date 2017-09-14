@@ -31,7 +31,7 @@ def get_data(vocab_processor, inpH, train_x1, train_x2, train_y, max_document_le
     return (train_x1_i, train_x2_i, new_mask_x1, new_mask_x2, train_y)
 
 
-model_dir = "./runs/Operation1501588184"
+model_dir = "./Exp/runs/Description1502868912"
 
 checkpoint_dir = os.path.join(model_dir, "checkpoints")
 print(checkpoint_dir)
@@ -43,9 +43,9 @@ vocab_file = os.path.join(checkpoint_dir, "vocab")
 vocab_processor = MyVocabularyProcessor(max_document_length, min_frequency=0)
 vocab_processor = vocab_processor.restore(vocab_file)
 
-task_num = 2
+task_num = 1
 name = "des" if task_num == 1 else "opr"
-test_file = "../data/test_data_0724_" + name + ".txt"
+test_file = "../data/test_data_0816_" + name + ".txt"
 test_x1, test_x2, test_y = inpH.getTsvTestData(test_file, "\t", max_document_length, y_is_value)
 
 test_set = get_data(vocab_processor, inpH, test_x1, test_x2, test_y, max_document_length)
@@ -53,7 +53,7 @@ test_set = get_data(vocab_processor, inpH, test_x1, test_x2, test_y, max_documen
 filename = model_dir + "/test_look.txt"
 file = open(filename, "w+")
 
-param_f = open(model_dir + "/params.txt", "w+")
+# param_f = open(model_dir + "/params.txt", "w+")
 graph = tf.Graph()
 
 with graph.as_default():
